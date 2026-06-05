@@ -1,0 +1,60 @@
+# Production stack: public Caddy (TLS) + app. Admin is exposed ONLY on the
+# host's NetBird interface IP — never on the public internet.
+#
+# Usage:
+#   cp .env.prod.example .env        # then fill in real values
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Requires in .env: DOMAIN, NETBIRD_IP, SECRET_KEY, PUBLIC_BASE_URL, SMTP_*, etc.
+
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: "sqlite:////data/planer.db"
+      ENABLE_DOCS: "false"
+    command:
+      - uvicorn
+      - planer.web.app:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+      - --no-access-log          # uvicorn's own access log would leak magic-link tokens
+    volumes:
+      - planer-data:/data
+    # Admin access: bind 8000 to the host's NetBird IP only. NOT 0.0.0.0.
+    # Caddy still reaches the app via the internal docker network (app:8000).
+    ports:
+      - "${NETBIRD_IP}:8000:8000"
+    expose:
+      - "8000"
+    networks:
+      - web
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - app
+    environment:
+      DOMAIN: "${DOMAIN}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+    restart: unless-stopped
+
+networks:
+  web:
+
+volumes:
+  planer-data:
+  caddy-data:
+  caddy-config:

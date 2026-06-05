@@ -1,0 +1,19 @@
+# Public entrypoint: automatic HTTPS (Let's Encrypt) for the student/tutor
+# magic-link flows. The admin area is NOT served here — it is reachable only
+# over the NetBird overlay (see docker-compose.prod.yml).
+{$DOMAIN} {
+	encode gzip
+
+	# /admin is private. Do not expose or even acknowledge it publicly.
+	handle /admin* {
+		respond "Not found" 404
+	}
+
+	# Everything else (availability form, tutor attendance, health) is public.
+	handle {
+		reverse_proxy app:8000 {
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}

@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - planer-data:/data
+    environment:
+      # Development value — override in production via .env or secrets manager
+      SECRET_KEY: "dev-secret-key-change-in-production-must-be-at-least-32-chars"
+      DATABASE_URL: "sqlite:////data/planer.db"
+    depends_on:
+      - mailhog
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  planer-data:

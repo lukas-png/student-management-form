@@ -1,0 +1,53 @@
+[
+  {
+    "userId": "u1",
+    "displayName": "Alice Muster",
+    "email": "alice@uni.de",
+    "matriculationNumber": "111111",
+    "groupId": "g1",
+    "groupName": "Gruppe 1",
+    "hasAdmission": true,
+    "admissions": [
+      {
+        "rule": "INDIVIDUAL_PERCENT_WITH_ALLOWED_FAILURES",
+        "assignmentType": "HOMEWORK",
+        "achievedPoints": 2,
+        "passed": false
+      }
+    ]
+  },
+  {
+    "userId": "u2",
+    "displayName": "Bob Muster",
+    "email": "bob@uni.de",
+    "matriculationNumber": "222222",
+    "groupId": "g1",
+    "groupName": "Gruppe 1",
+    "hasAdmission": true,
+    "admissions": [
+      {
+        "rule": "INDIVIDUAL_PERCENT_WITH_ALLOWED_FAILURES",
+        "assignmentType": "HOMEWORK",
+        "achievedPoints": 5,
+        "passed": true
+      }
+    ]
+  },
+  {
+    "userId": "u3",
+    "displayName": "Carol Muster",
+    "email": "carol@uni.de",
+    "matriculationNumber": "333333",
+    "groupId": "g2",
+    "groupName": "Gruppe 2",
+    "hasAdmission": false,
+    "admissions": [
+      {
+        "rule": "INDIVIDUAL_PERCENT_WITH_ALLOWED_FAILURES",
+        "assignmentType": "HOMEWORK",
+        "achievedPoints": 1,
+        "passed": false
+      }
+    ]
+  }
+]
