@@ -1,4 +1,4 @@
-"""Access-log middleware test (M-logging): tokens must be redacted from logs."""
+"""Access-log middleware test: tokens must be redacted from logs."""
 
 from __future__ import annotations
 
