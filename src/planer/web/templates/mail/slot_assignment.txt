@@ -1,0 +1,12 @@
+Subject: [Tutorium] Dein Vorstellungstermin steht fest
+Hallo {{ name }},
+
+deine Gruppe ({{ group_name }}) stellt zum folgenden Termin vor:
+
+  {{ slot_time }}{% if room %} – Raum {{ room }}{% endif %}
+
+Bitte sei pünktlich und vollständig anwesend. Bei Problemen antworte
+einfach auf diese Mail.
+
+Viele Grüße
+Das Tutorium-Team

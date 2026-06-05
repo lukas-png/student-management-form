@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anwesenheit markieren</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+    .group { border: 1px solid #ccc; padding: .8rem; margin-bottom: .8rem; border-radius: 4px; }
+    .members { color: #555; font-size: .9rem; }
+    label { margin-right: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>Anwesenheit markieren</h1>
+  {% if slot %}
+  <p><strong>Termin:</strong> {{ slot.starts_at.strftime('%d.%m.%Y %H:%M') }}
+     {% if slot.room %} &mdash; Raum {{ slot.room }}{% endif %}</p>
+  {% endif %}
+
+  {% if rows %}
+  <form method="post">
+    {% for row in rows %}
+    <div class="group">
+      <div><strong>{{ row.group_name }}</strong></div>
+      {% if row.members %}<div class="members">{{ row.members | join(', ') }}</div>{% endif %}
+      <div style="margin-top:.5rem">
+        <label>
+          <input type="radio" name="status_{{ row.group_id }}" value="PRESENTED"
+                 {% if row.status == 'PRESENTED' %}checked{% endif %}> vorgestellt
+        </label>
+        <label>
+          <input type="radio" name="status_{{ row.group_id }}" value="NO_SHOW"
+                 {% if row.status == 'NO_SHOW' %}checked{% endif %}> nicht erschienen
+        </label>
+      </div>
+    </div>
+    {% endfor %}
+    <button type="submit">Speichern</button>
+  </form>
+  {% else %}
+  <p>Für diesen Termin sind keine Gruppen eingeplant.</p>
+  {% endif %}
+</body>
+</html>

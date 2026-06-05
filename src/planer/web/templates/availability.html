@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if mode == 'confirm' %}Termin bestätigen{% else %}Verfügbarkeit erfassen{% endif %}</title>
+</head>
+<body>
+{% if mode == 'confirm' %}
+  <h1>Dein Vorstellungstermin</h1>
+  {% if slots %}
+    {% set slot = slots[0] %}
+    <p>Für deine Gruppe ist folgender Termin vorgesehen:</p>
+    <p><strong>{{ slot.starts_at.strftime('%d.%m.%Y %H:%M') }}{% if slot.room %} &mdash; {{ slot.room }}{% endif %}</strong></p>
+    <p>Kannst du zu diesem Termin kommen?</p>
+    <form method="post">
+      <div>
+        <label>
+          <input type="radio" name="confirm" value="yes"
+                 {% if existing.get(slot.id) == true %}checked{% endif %}> Ja, ich komme
+        </label>
+      </div>
+      <div>
+        <label>
+          <input type="radio" name="confirm" value="no"
+                 {% if existing.get(slot.id) == false %}checked{% endif %}> Nein, ich kann nicht
+        </label>
+      </div>
+      <p><button type="submit">Absenden</button></p>
+    </form>
+  {% else %}
+    <p>Für deine Gruppe wurde noch kein Termin festgelegt.
+       Bitte schau später noch einmal über deinen Link vorbei.</p>
+  {% endif %}
+{% else %}
+  <h1>Bitte wähle deine verfügbaren Termine</h1>
+  <p>Setze einen Haken bei allen Zeiten, zu denen du erscheinen kannst.
+     Du kannst deine Angabe bis zur Deadline jederzeit ändern.</p>
+  <form method="post">
+    {% if slots %}
+      {% for slot in slots %}
+      <div>
+        <input type="checkbox"
+               id="slot_{{ slot.id }}"
+               name="slot_{{ slot.id }}"
+               {% if existing.get(slot.id) %}checked{% endif %}>
+        <label for="slot_{{ slot.id }}">
+          {{ slot.starts_at.strftime('%d.%m.%Y %H:%M') }}
+          {% if slot.room %} &mdash; {{ slot.room }}{% endif %}
+        </label>
+      </div>
+      {% endfor %}
+      <p><button type="submit">Absenden</button></p>
+    {% else %}
+      <p>Für diese Runde sind noch keine Termine eingetragen.</p>
+    {% endif %}
+  </form>
+{% endif %}
+</body>
+</html>

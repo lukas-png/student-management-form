@@ -1,0 +1,14 @@
+Subject: [Tutorium] Bitte deine Verfügbarkeit eintragen
+Hallo {{ name }},
+
+für die anstehende Hausaufgaben-Vorstellung müssen wir einen Termin finden.
+
+Bitte trage über den folgenden Link ein, wann du Zeit hast:
+
+{{ link }}
+
+Der Link ist persönlich. Bitte nicht weitergeben! Du kannst deine Angabe
+bis zur Deadline jederzeit ändern.
+
+Viele Grüße
+Das Tutorium-Team

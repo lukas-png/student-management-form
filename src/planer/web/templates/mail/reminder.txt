@@ -1,0 +1,12 @@
+Subject: [Tutorium] Erinnerung: Verfügbarkeit noch offen
+Hallo {{ name }},
+
+wir haben von dir noch keine Verfügbarkeit für die Hausaufgaben-Vorstellung
+erhalten. Bitte trage deine Zeiten zeitnah über diesen Link ein:
+
+{{ link }}
+
+Ohne deine Angabe können wir dich nicht sicher einplanen.
+
+Viele Grüße
+Das Tutorium-Team
