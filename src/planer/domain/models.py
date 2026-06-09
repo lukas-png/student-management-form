@@ -34,6 +34,17 @@ class Slot:
     capacity: int = 5
 
 
+def resolve_group_id(participant: Participant) -> str:
+    """Canonical group id for a participant.
+
+    Returns the real ``group_id`` if present, otherwise the ``user_id`` so that
+    a solo student (empty ``group_id``) forms a stable single-member group. Both
+    the domain group builder and the persistence layer use this so a solo
+    student's stored ``group_id`` matches the synthesised ``Group.id``.
+    """
+    return participant.group_id or participant.user_id
+
+
 def parse_bool(value: str | bool) -> bool:
     """Convert WAHR/FALSCH strings or native bools. Raises ValueError for anything else."""
     if isinstance(value, bool):

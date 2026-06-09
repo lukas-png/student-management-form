@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from planer.domain.models import Group, Participant
+from planer.domain.models import Group, Participant, resolve_group_id
 
 _RULE = "INDIVIDUAL_PERCENT_WITH_ALLOWED_FAILURES"
 _ASSIGNMENT_TYPE = "HOMEWORK"
@@ -32,7 +32,7 @@ def build_groups(participants: list[Participant]) -> list[Group]:
     by_group: defaultdict[str, list[Participant]] = defaultdict(list)
     group_names: dict[str, str] = {}
     for p in participants:
-        gid = p.group_id if p.group_id else p.user_id
+        gid = resolve_group_id(p)
         gname = p.group_name if p.group_id else p.display_name
         by_group[gid].append(p)
         group_names.setdefault(gid, gname)

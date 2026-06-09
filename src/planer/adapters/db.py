@@ -8,7 +8,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from planer.domain.models import Group as DomainGroup
-from planer.domain.models import Participant
+from planer.domain.models import Participant, resolve_group_id
 
 
 def _now() -> datetime:
@@ -150,7 +150,7 @@ def upsert_students(session: Session, participants: list[Participant]) -> None:
                 name=p.display_name,
                 email=p.email,
                 matr_nr=p.matr_nr,
-                group_id=p.group_id,
+                group_id=resolve_group_id(p),
             )
         )
     session.commit()

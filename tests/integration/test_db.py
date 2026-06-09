@@ -19,16 +19,19 @@ from planer.adapters.db import (
     Presentation,
     PresentationStatus,
     Student,
+    build_domain_groups,
     create_presentation,
     create_round,
     create_slot,
     create_tables,
     email_already_sent,
+    get_all_groups,
     get_availabilities_for_round,
     get_curations_for_round,
     get_presentations_for_round,
     get_round,
     get_slots_for_round,
+    get_students_in_groups,
     list_rounds,
     log_email,
     make_engine,
@@ -38,6 +41,7 @@ from planer.adapters.db import (
     upsert_groups,
     upsert_students,
 )
+from planer.domain.filtering import build_groups
 from planer.domain.models import Group as DomainGroup
 from planer.domain.models import Participant
 
@@ -107,11 +111,13 @@ class TestStudents:
         assert s is not None
         assert s.group_id == "g42"
 
-    def test_empty_group_id_stored_as_empty_string(self, session: Session) -> None:
+    def test_empty_group_id_resolved_to_user_id(self, session: Session) -> None:
+        # A solo student (empty group_id) is stored under its own user_id so the
+        # row matches the synthesised solo Group.id built by build_groups.
         upsert_students(session, [_participant(group_id="")])
         s = session.get(Student, "u1")
         assert s is not None
-        assert s.group_id == ""
+        assert s.group_id == "u1"
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +143,23 @@ class TestGroups:
         upsert_groups(session, [_domain_group("g1"), _domain_group("g2", "Team B")])
         assert session.get(Group, "g1") is not None
         assert session.get(Group, "g2") is not None
+
+    def test_solo_student_round_trips_with_its_member(self, session: Session) -> None:
+        # Regression: a solo student (empty group_id) must reappear as a member
+        # of its own group after persistence, not as an empty group. build_groups
+        # synthesises Group.id = user_id; upsert_students must store the same id.
+        solo = _participant(uid="solo1", group_id="")
+        groups = build_groups([solo])
+        upsert_students(session, [solo])
+        upsert_groups(session, groups)
+
+        db_groups = get_all_groups(session)
+        db_students = get_students_in_groups(session, [g.id for g in db_groups])
+        domain_groups = build_domain_groups(db_groups, db_students)
+
+        assert len(domain_groups) == 1
+        assert domain_groups[0].id == "solo1"
+        assert [m.user_id for m in domain_groups[0].members] == ["solo1"]
 
 
 # ---------------------------------------------------------------------------
