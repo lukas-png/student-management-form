@@ -1,7 +1,7 @@
-Subject: [Tutorium] Erinnerung: Verfügbarkeit noch offen
+Subject: [Tutorium] Erinnerung: Verfügbarkeit noch offen{% if round_label %} ({{ round_label }}){% endif %}
 Hallo {{ name }},
 
-wir haben von dir noch keine Verfügbarkeit für die Hausaufgaben-Vorstellung
+wir haben von dir noch keine Verfügbarkeit für die Hausaufgaben-Vorstellung{% if round_label %} ({{ round_label }}){% endif %}
 erhalten. Bitte trage deine Zeiten zeitnah über diesen Link ein:
 
 {{ link }}

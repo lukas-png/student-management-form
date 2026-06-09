@@ -1,7 +1,7 @@
-Subject: [Tutorium] Bitte deine Verfügbarkeit eintragen
+Subject: [Tutorium] Bitte deine Verfügbarkeit eintragen{% if round_label %} ({{ round_label }}){% endif %}
 Hallo {{ name }},
 
-für die anstehende Hausaufgaben-Vorstellung müssen wir einen Termin finden.
+für die anstehende Hausaufgaben-Vorstellung{% if round_label %} ({{ round_label }}){% endif %} müssen wir einen Termin finden.
 
 Bitte trage über den folgenden Link ein, wann du Zeit hast:
 
@@ -9,6 +9,9 @@ Bitte trage über den folgenden Link ein, wann du Zeit hast:
 
 Der Link ist persönlich. Bitte nicht weitergeben! Du kannst deine Angabe
 bis zur Deadline jederzeit ändern.
+
+Hinweis: Insgesamt ist eine Vorstellung als Zulassungskriterium erforderlich.
+Wer bereits eine Altzulassung hat, muss nicht mitmachen.
 
 Viele Grüße
 Das Tutorium-Team
