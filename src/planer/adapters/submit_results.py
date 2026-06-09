@@ -153,7 +153,7 @@ def submit_presentations(
                     },
                 )
                 report.updated.append(pl.user_id)
-            except Exception as exc: 
+            except Exception as exc:
                 report.failed.append((pl.user_id, str(exc)))
             continue
         if dry_run:
@@ -176,7 +176,7 @@ def submit_presentations(
                 to_create,
             )
             report.created.extend(dto["userId"] for dto in to_create)
-        except Exception as exc:  
+        except Exception as exc:
             report.failed.extend((dto["userId"], str(exc)) for dto in to_create)
 
     logger.info(

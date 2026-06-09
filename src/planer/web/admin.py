@@ -26,6 +26,7 @@ from planer.adapters.db import (
     list_rounds,
     set_all_curations_included,
     set_round_mode,
+    set_round_quorum,
     upsert_curation,
 )
 from planer.adapters.submit_results import submit_presentations
@@ -201,19 +202,20 @@ async def round_dashboard(
     db_students = get_students_in_groups(session, group_ids)
     domain_groups = build_domain_groups(db_groups, db_students)
 
+    require_all = current_round.quorum != "any"
     group_rows: list[GroupRow] = []
     for dg in domain_groups:
         cur: Curation | None = curations.get(dg.id)
         included = cur.included if cur else True
         pinned_slot_id = cur.pinned_slot_id if cur else None
         override = cur.override if cur else False
-        feasible = group_feasible_slots(dg, avail_dict, domain_slots)
+        feasible = group_feasible_slots(dg, avail_dict, domain_slots, require_all=require_all)
         pres: Presentation | None = presentations.get(dg.id)
         # Conflict: a slot was fixed for the group but a member declined it
         # (and the admin hasn't overridden) → must be resolved before solving.
         is_conflict = (
             pinned_slot_id is not None
-            and member_declined(dg, str(pinned_slot_id), avail_dict)
+            and member_declined(dg, str(pinned_slot_id), avail_dict, require_all=require_all)
             and not override
         )
         group_rows.append(
@@ -242,6 +244,7 @@ async def round_dashboard(
             "group_rows": group_rows,
             "solver_ran": solver_ran,
             "mode": current_round.mode,
+            "quorum": current_round.quorum,
         },
         settings,
     )
@@ -366,6 +369,24 @@ async def set_mode(
         raise HTTPException(status_code=400, detail="invalid mode")
     set_round_mode(session, round_id, mode)
     logger.info("round mode set", extra={"round_id": round_id, "mode": mode, "admin": admin})
+    return RedirectResponse(url=f"/admin/rounds/{round_id}", status_code=303)
+
+
+@router.post(
+    "/rounds/{round_id}/quorum",
+    response_model=None,
+    dependencies=[Depends(require_csrf)],
+)
+async def set_quorum(
+    round_id: int,
+    quorum: str = Form(...),
+    session: Session = Depends(get_db),
+    admin: str = Depends(get_admin_user),
+) -> RedirectResponse:
+    if quorum not in ("all", "any"):
+        raise HTTPException(status_code=400, detail="invalid quorum")
+    set_round_quorum(session, round_id, quorum)
+    logger.info("round quorum set", extra={"round_id": round_id, "quorum": quorum, "admin": admin})
     return RedirectResponse(url=f"/admin/rounds/{round_id}", status_code=303)
 
 

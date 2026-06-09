@@ -36,6 +36,27 @@
     {% endif %}
   </section>
 
+  <!-- Quorum -->
+  <section class="panel">
+    <h2>Verfügbarkeits-Regel</h2>
+    <form method="post" action="/admin/rounds/{{ current_round.id }}/quorum" class="toolbar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <select name="quorum" aria-label="Verfügbarkeits-Regel">
+        <option value="all" {% if quorum == 'all' %}selected{% endif %}>
+          Alle Mitglieder müssen den Termin können
+        </option>
+        <option value="any" {% if quorum == 'any' %}selected{% endif %}>
+          Einer reicht (Termin gilt, wenn ≥1 Mitglied kann)
+        </option>
+      </select>
+      <button type="submit">Speichern</button>
+    </form>
+    {% if quorum == 'any' %}
+    <p class="panel-hint">Ein Slot zählt als machbar, sobald mindestens ein Gruppenmitglied verfügbar ist.
+       Die ganze Gruppe wird trotzdem vorgeladen — Assessments werden individuell bewertet.</p>
+    {% endif %}
+  </section>
+
   <!-- Slots -->
   <section class="panel">
     <h2>Termine</h2>

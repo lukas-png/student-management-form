@@ -55,6 +55,9 @@ class PlanningRound(SQLModel, table=True):
     # "availability" = ask students which slots they can do (default);
     # "confirm" = admin fixes a slot per group, students only confirm yes/no.
     mode: str = "availability"
+    # Availability quorum: "all" = every member must be available for a slot
+    # (default, intersection); "any" = one available member suffices (union).
+    quorum: str = "all"
 
 
 class Slot(SQLModel, table=True):
@@ -130,6 +133,10 @@ def _ensure_columns(engine: Engine) -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE planning_round ADD COLUMN mode VARCHAR NOT NULL DEFAULT 'availability'"
             )
+        if "quorum" not in round_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE planning_round ADD COLUMN quorum VARCHAR NOT NULL DEFAULT 'all'"
+            )
         cur_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(curation)")}
         if "override" not in cur_cols:
             conn.exec_driver_sql(
@@ -183,6 +190,14 @@ def set_round_mode(session: Session, round_id: int, mode: str) -> None:
     rnd = session.get(PlanningRound, round_id)
     if rnd is not None:
         rnd.mode = mode
+        session.add(rnd)
+        session.commit()
+
+
+def set_round_quorum(session: Session, round_id: int, quorum: str) -> None:
+    rnd = session.get(PlanningRound, round_id)
+    if rnd is not None:
+        rnd.quorum = quorum
         session.add(rnd)
         session.commit()
 

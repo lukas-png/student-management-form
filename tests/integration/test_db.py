@@ -35,6 +35,7 @@ from planer.adapters.db import (
     list_rounds,
     log_email,
     make_engine,
+    set_round_quorum,
     update_presentation_status,
     upsert_availability,
     upsert_curation,
@@ -198,6 +199,18 @@ class TestPlanningRounds:
 
     def test_list_rounds_empty(self, session: Session) -> None:
         assert list_rounds(session) == []
+
+    def test_quorum_defaults_to_all(self, session: Session) -> None:
+        rnd = create_round(session)
+        assert rnd.quorum == "all"
+
+    def test_set_round_quorum(self, session: Session) -> None:
+        rnd = create_round(session)
+        assert rnd.id is not None
+        set_round_quorum(session, rnd.id, "any")
+        updated = get_round(session, rnd.id)
+        assert updated is not None
+        assert updated.quorum == "any"
 
 
 # ---------------------------------------------------------------------------

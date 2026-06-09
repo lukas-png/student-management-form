@@ -316,6 +316,41 @@ class TestSolver:
             presos = get_presentations_for_round(sess, round_id)
         assert len(presos) == 0
 
+    def test_any_quorum_places_group_with_one_available_member(
+        self,
+        client: TestClient,
+        test_engine,  # type: ignore[no-untyped-def]
+    ) -> None:
+        # Two members, only u1 available. Under the default "all" quorum the group
+        # is unplaceable; switching the round to "any" places it on the slot.
+        from planer.adapters.db import set_round_quorum, upsert_availability
+
+        with Session(test_engine) as sess:
+            upsert_students(sess, [_participant("u1", "g1"), _participant("u2", "g1")])
+            upsert_groups(sess, [DomainGroup(id="g1", name="G1", members=())])
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            slot = create_slot(sess, rnd.id, _T0)
+            assert slot.id is not None
+            upsert_availability(sess, "u1", slot.id, available=True)
+            upsert_availability(sess, "u2", slot.id, available=False)
+            round_id, slot_id = rnd.id, slot.id
+
+        # Default "all" quorum: u2 declined → no feasible slot → unplaced.
+        client.post(f"/admin/rounds/{round_id}/solve", follow_redirects=True)
+        with Session(test_engine) as sess:
+            assert len(get_presentations_for_round(sess, round_id)) == 0
+
+        # Switch to "any": one available member is enough → group is placed.
+        with Session(test_engine) as sess:
+            set_round_quorum(sess, round_id, "any")
+        client.post(f"/admin/rounds/{round_id}/solve", follow_redirects=True)
+        with Session(test_engine) as sess:
+            presos = get_presentations_for_round(sess, round_id)
+        assert len(presos) == 1
+        assert presos[0].group_id == "g1"
+        assert presos[0].slot_id == slot_id
+
     def test_rerun_solver_overwrites(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
         from planer.adapters.db import upsert_availability
 
@@ -523,6 +558,37 @@ class TestBulkCurationAndMode:
 
         resp = client.post(
             f"/admin/rounds/{round_id}/mode", data={"mode": "nonsense"}, follow_redirects=False
+        )
+        assert resp.status_code == 400
+
+    def test_set_quorum_any(
+        self,
+        client: TestClient,
+        test_engine,  # type: ignore[no-untyped-def]
+    ) -> None:
+        from planer.adapters.db import get_round
+
+        with Session(test_engine) as sess:
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            round_id = rnd.id
+
+        client.post(f"/admin/rounds/{round_id}/quorum", data={"quorum": "any"})
+        with Session(test_engine) as sess:
+            assert get_round(sess, round_id).quorum == "any"
+
+    def test_set_quorum_invalid_rejected(
+        self,
+        client: TestClient,
+        test_engine,  # type: ignore[no-untyped-def]
+    ) -> None:
+        with Session(test_engine) as sess:
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            round_id = rnd.id
+
+        resp = client.post(
+            f"/admin/rounds/{round_id}/quorum", data={"quorum": "nonsense"}, follow_redirects=False
         )
         assert resp.status_code == 400
 

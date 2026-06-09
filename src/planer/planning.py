@@ -18,6 +18,7 @@ from planer.adapters.db import (
     get_availabilities_for_round,
     get_curations_for_round,
     get_presentations_before_round,
+    get_round,
     get_slots_for_round,
     get_students_in_groups,
 )
@@ -32,6 +33,8 @@ logger = get_logger("planning")
 
 def solve_round(session: Session, round_id: int) -> ScheduleResult:
     """Run the solver for a round and persist its Presentations (replacing any prior run)."""
+    rnd = get_round(session, round_id)
+    require_all = rnd is None or rnd.quorum != "any"
     slots = get_slots_for_round(session, round_id)
     domain_slots = [DomainSlot(id=str(s.id), capacity=s.capacity) for s in slots]
     slot_capacities = {str(s.id): s.capacity for s in slots}
@@ -62,7 +65,8 @@ def solve_round(session: Session, round_id: int) -> ScheduleResult:
     ]
 
     feasible: dict[str, set[str]] = {
-        dg.id: group_feasible_slots(dg, avail_dict, domain_slots) for dg in included_groups
+        dg.id: group_feasible_slots(dg, avail_dict, domain_slots, require_all=require_all)
+        for dg in included_groups
     }
 
     # Pinned groups are placed on their fixed slot. But if a member declined that
@@ -75,7 +79,9 @@ def solve_round(session: Session, round_id: int) -> ScheduleResult:
             continue
         pin_slot = str(c.pinned_slot_id)
         group = groups_by_id.get(gid)
-        declined = group is not None and member_declined(group, pin_slot, avail_dict)
+        declined = group is not None and member_declined(
+            group, pin_slot, avail_dict, require_all=require_all
+        )
         if declined and not c.override:
             continue  # conflict — leave unscheduled for the admin to resolve
         pinned[gid] = pin_slot
