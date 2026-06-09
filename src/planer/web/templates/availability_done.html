@@ -1,13 +1,10 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gespeichert</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}Gespeichert{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
   <h1>Danke!</h1>
   <p>Deine Verfügbarkeit wurde gespeichert.
      Du kannst sie über deinen Link bis zur Deadline erneut einreichen.</p>
-</body>
-</html>
+</div>
+{% endblock %}

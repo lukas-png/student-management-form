@@ -1,13 +1,14 @@
-<!DOCTYPE html>
-<html lang="de">
-<head><meta charset="UTF-8"><title>Admin</title></head>
-<body>
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
   <h1>Tutorium-Planer Admin</h1>
   <p>Noch keine Planungsrunde vorhanden.</p>
-  <form method="post" action="/admin/rounds">
+  <form method="post" action="/admin/rounds" class="toolbar">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Label: <input name="label" type="text"></label>
-    <button type="submit">Runde erstellen</button>
+    <button type="submit" class="btn-primary">Runde erstellen</button>
   </form>
-</body>
-</html>
+</div>
+{% endblock %}

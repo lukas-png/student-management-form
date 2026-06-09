@@ -1,176 +1,178 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin – Runde {{ current_round.id }}</title>
-  <style>
-    body { font-family: sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
-    th, td { border: 1px solid #ccc; padding: .4rem .7rem; text-align: left; }
-    th { background: #f0f0f0; }
-    .excluded { color: #999; }
-    .conflict { background: #fff0f0; }
-    .assigned { background: #f0fff0; }
-    form.inline { display: inline; }
-    .nav { margin-bottom: 1.5rem; }
-    .nav a { margin-right: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>Admin &mdash; Runde {{ current_round.id }}{% if current_round.label %}: {{ current_round.label }}{% endif %}</h1>
+{% extends "base.html" %}
+{% block title %}Admin – Runde {{ current_round.id }}{% endblock %}
+{% block content %}
+  <h1>Runde {{ current_round.id }}{% if current_round.label %}: {{ current_round.label }}{% endif %}</h1>
 
   <div class="nav">
     {% for r in rounds %}
-      <a href="/admin/rounds/{{ r.id }}">Runde {{ r.id }}{% if r.label %} ({{ r.label }}){% endif %}</a>
+      <a href="/admin/rounds/{{ r.id }}" class="{% if r.id == current_round.id %}active{% endif %}">Runde {{ r.id }}{% if r.label %} ({{ r.label }}){% endif %}</a>
     {% endfor %}
-    &nbsp;|&nbsp;
-    <form method="post" action="/admin/rounds" style="display:inline">
+    <span class="nav-sep"></span>
+    <form method="post" action="/admin/rounds" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input name="label" placeholder="Neues Label" style="width:12rem">
+      <input name="label" placeholder="Neues Label">
       <button type="submit">Neue Runde</button>
     </form>
   </div>
 
   <!-- Mode -->
-  <h2>Modus</h2>
-  <form method="post" action="/admin/rounds/{{ current_round.id }}/mode">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <select name="mode">
-      <option value="availability" {% if mode == 'availability' %}selected{% endif %}>
-        Verfügbarkeit abfragen (Studis wählen aus allen Terminen)
-      </option>
-      <option value="confirm" {% if mode == 'confirm' %}selected{% endif %}>
-        Termin bestätigen (fester Slot je Gruppe, Studis sagen nur Ja/Nein)
-      </option>
-    </select>
-    <button type="submit">Modus speichern</button>
-  </form>
-  {% if mode == 'confirm' %}
-  <p><em>Im Bestätigungs-Modus pinnst du unten je Gruppe einen Slot (Spalte „Pinned Slot");
-     der Verfügbarkeits-Link zeigt den Studis dann nur diesen einen Termin mit Ja/Nein.</em></p>
-  {% endif %}
+  <section class="panel">
+    <h2>Modus</h2>
+    <form method="post" action="/admin/rounds/{{ current_round.id }}/mode" class="toolbar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <select name="mode" aria-label="Modus">
+        <option value="availability" {% if mode == 'availability' %}selected{% endif %}>
+          Verfügbarkeit abfragen (Studis wählen aus allen Terminen)
+        </option>
+        <option value="confirm" {% if mode == 'confirm' %}selected{% endif %}>
+          Termin bestätigen (fester Slot je Gruppe, Studis sagen nur Ja/Nein)
+        </option>
+      </select>
+      <button type="submit">Speichern</button>
+    </form>
+    {% if mode == 'confirm' %}
+    <p class="panel-hint">Im Bestätigungs-Modus pinnst du unten je Gruppe einen Slot (Spalte „Pinned Slot");
+       der Verfügbarkeits-Link zeigt den Studis dann nur diesen einen Termin mit Ja/Nein.</p>
+    {% endif %}
+  </section>
 
   <!-- Slots -->
-  <h2>Termine</h2>
-  {% if slots %}
-  <table>
-    <tr><th>ID</th><th>Datum/Zeit</th><th>Raum</th><th>Kapazität</th><th>Tutor-Link</th><th></th></tr>
-    {% for slot in slots %}
-    <tr>
-      <td>{{ slot.id }}</td>
-      <td>{{ slot.starts_at.strftime('%d.%m.%Y %H:%M') }}</td>
-      <td>{{ slot.room or '–' }}</td>
-      <td>{{ slot.capacity }}</td>
-      <td><a href="{{ tutor_links[slot.id] }}">Anwesenheit markieren</a></td>
-      <td>
-        <form method="post" action="/admin/rounds/{{ current_round.id }}/slots/{{ slot.id }}/delete" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" onclick="return confirm('Termin löschen?')">Löschen</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p>Keine Termine eingetragen.</p>
-  {% endif %}
+  <section class="panel">
+    <h2>Termine</h2>
+    {% if slots %}
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Datum/Zeit</th><th>Raum</th><th>Kapazität</th><th>Tutor-Link</th><th><span class="visually-hidden">Aktion</span></th></tr>
+      </thead>
+      <tbody>
+      {% for slot in slots %}
+      <tr>
+        <td>{{ slot.id }}</td>
+        <td>{{ slot.starts_at.strftime('%d.%m.%Y %H:%M') }}</td>
+        <td>{{ slot.room or '–' }}</td>
+        <td>{{ slot.capacity }}</td>
+        <td><a href="{{ tutor_links[slot.id] }}">Anwesenheit markieren</a></td>
+        <td>
+          <form method="post" action="/admin/rounds/{{ current_round.id }}/slots/{{ slot.id }}/delete" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn-danger btn-sm" onclick="return confirm('Termin löschen?')">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Keine Termine eingetragen.</p>
+    {% endif %}
 
-  <details>
-    <summary>Termin hinzufügen</summary>
-    <form method="post" action="/admin/rounds/{{ current_round.id }}/slots" style="margin-top:.5rem">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Datum/Zeit (ISO): <input name="starts_at" type="datetime-local" required></label>
-      <label>Raum: <input name="room" type="text"></label>
-      <label>Kapazität: <input name="capacity" type="number" value="5" min="1"></label>
-      <button type="submit">Hinzufügen</button>
-    </form>
-  </details>
+    <details>
+      <summary>Termin hinzufügen</summary>
+      <form method="post" action="/admin/rounds/{{ current_round.id }}/slots" class="toolbar">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Datum/Zeit (ISO): <input name="starts_at" type="datetime-local" required></label>
+        <label>Raum: <input name="room" type="text"></label>
+        <label>Kapazität: <input name="capacity" type="number" value="5" min="1"></label>
+        <button type="submit" class="btn-primary">Hinzufügen</button>
+      </form>
+    </details>
+  </section>
 
   <!-- Solver -->
-  <h2>Zuweisung</h2>
-  <form method="post" action="/admin/rounds/{{ current_round.id }}/solve">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit">Solver ausführen</button>
-    {% if solver_ran %}<span style="color:green"> ✓ Zuweisung vorhanden</span>{% endif %}
-  </form>
-  {% if solver_ran %}
-  <p><a href="/admin/rounds/{{ current_round.id }}/export.csv">Anwesenheit als CSV exportieren</a></p>
-  <form method="post" action="/admin/rounds/{{ current_round.id }}/sync" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="dry_run" value="1">
-    <button type="submit">Vorschau: Ergebnisse an stu-mgmt</button>
-  </form>
-  <form method="post" action="/admin/rounds/{{ current_round.id }}/sync" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit">Ergebnisse an stu-mgmt übertragen</button>
-  </form>
-  {% if request.query_params.get('sync') %}
-  <p><small>Sync: {{ request.query_params.get('sync') }}</small></p>
-  {% endif %}
-  {% endif %}
+  <section class="panel">
+    <h2>Zuweisung</h2>
+    <form method="post" action="/admin/rounds/{{ current_round.id }}/solve" class="toolbar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn-primary">Solver ausführen</button>
+      {% if solver_ran %}<span class="badge-ok">✓ Zuweisung vorhanden</span>{% endif %}
+    </form>
+    {% if solver_ran %}
+    <div class="toolbar">
+      <a class="btn" href="/admin/rounds/{{ current_round.id }}/export.csv">CSV exportieren</a>
+      <form method="post" action="/admin/rounds/{{ current_round.id }}/sync" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="dry_run" value="1">
+        <button type="submit">Vorschau: Ergebnisse an stu-mgmt</button>
+      </form>
+      <form method="post" action="/admin/rounds/{{ current_round.id }}/sync" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">Ergebnisse an stu-mgmt übertragen</button>
+      </form>
+    </div>
+    {% if request.query_params.get('sync') %}
+    <p class="panel-hint">Sync: {{ request.query_params.get('sync') }}</p>
+    {% endif %}
+    {% endif %}
+  </section>
 
   <!-- Groups -->
-  <h2>Gruppen</h2>
-  <form method="post" action="/admin/rounds/{{ current_round.id }}/curate-all" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="included" value="false">
-    <button type="submit">Alle abwählen</button>
-  </form>
-  <form method="post" action="/admin/rounds/{{ current_round.id }}/curate-all" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="included" value="true">
-    <button type="submit">Alle auswählen</button>
-  </form>
-  <p><small>Erst alle abwählen, dann einzelne Gruppen per „Ja" + Speichern wieder zulassen.</small></p>
-  {% if group_rows %}
-  <table>
-    <tr>
-      <th>Gruppe</th>
-      <th>Berücksichtigt</th>
-      <th>Pinned Slot</th>
-      <th>Verfügbare Slots</th>
-      <th>Zugewiesen</th>
-      <th>Aktionen</th>
-    </tr>
-    {% for row in group_rows %}
-    <tr class="{% if not row.included %}excluded{% elif row.is_conflict %}conflict{% elif row.assigned_slot_id %}assigned{% endif %}">
-      <td>{{ row.group_name }} <small>({{ row.group_id }})</small></td>
-      <td>{% if row.included %}Ja{% else %}Nein{% endif %}</td>
-      <td>{{ row.pinned_slot_id or '–' }}</td>
-      <td>
-        {% if row.feasible_slot_ids %}
-          {{ row.feasible_slot_ids | join(', ') }}
-        {% else %}
-          <em>keine</em>
-        {% endif %}
-      </td>
-      <td>
-        {% if row.assigned_slot_id %}Slot {{ row.assigned_slot_id }}
-        {%- elif row.is_conflict %}<strong style="color:#b00">Konflikt (Absage)</strong>
-        {%- elif row.override and row.pinned_slot_id %}<em>trotz Absage geplant</em>
-        {%- else %}–{% endif %}
-      </td>
-      <td>
-        <form method="post" action="/admin/rounds/{{ current_round.id }}/groups/{{ row.group_id }}/curate" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <select name="included">
-            <option value="true" {% if row.included %}selected{% endif %}>Ja</option>
-            <option value="false" {% if not row.included %}selected{% endif %}>Nein</option>
-          </select>
-          <input name="pinned_slot_id" type="number" placeholder="Pin Slot-ID"
-                 value="{{ row.pinned_slot_id or '' }}" style="width:6rem">
-          <label title="Trotz Absage einplanen">
-            <input type="checkbox" name="override" value="true" {% if row.override %}checked{% endif %}> trotzdem
-          </label>
-          <button type="submit">Speichern</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p>Keine Gruppen in der Datenbank.</p>
-  {% endif %}
-</body>
-</html>
+  <section class="panel">
+    <h2>Gruppen</h2>
+    <div class="toolbar">
+      <form method="post" action="/admin/rounds/{{ current_round.id }}/curate-all" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="included" value="false">
+        <button type="submit">Alle abwählen</button>
+      </form>
+      <form method="post" action="/admin/rounds/{{ current_round.id }}/curate-all" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="included" value="true">
+        <button type="submit">Alle auswählen</button>
+      </form>
+    </div>
+    <p class="panel-hint">Erst alle abwählen, dann einzelne Gruppen per „Ja" + Speichern wieder zulassen.</p>
+    {% if group_rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>Gruppe</th>
+          <th>Berücksichtigt</th>
+          <th>Pinned Slot</th>
+          <th>Verfügbare Slots</th>
+          <th>Zugewiesen</th>
+          <th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in group_rows %}
+      <tr class="{% if not row.included %}excluded{% elif row.is_conflict %}conflict{% elif row.assigned_slot_id %}assigned{% endif %}">
+        <td>{{ row.group_name }} <small>({{ row.group_id }})</small></td>
+        <td>{% if row.included %}Ja{% else %}Nein{% endif %}</td>
+        <td>{{ row.pinned_slot_id or '–' }}</td>
+        <td>
+          {% if row.feasible_slot_ids %}
+            {{ row.feasible_slot_ids | join(', ') }}
+          {% else %}
+            <em>keine</em>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.assigned_slot_id %}Slot {{ row.assigned_slot_id }}
+          {%- elif row.is_conflict %}<strong class="conflict-text">Konflikt (Absage)</strong>
+          {%- elif row.override and row.pinned_slot_id %}<em>trotz Absage geplant</em>
+          {%- else %}–{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/admin/rounds/{{ current_round.id }}/groups/{{ row.group_id }}/curate" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="included" aria-label="Berücksichtigt">
+              <option value="true" {% if row.included %}selected{% endif %}>Ja</option>
+              <option value="false" {% if not row.included %}selected{% endif %}>Nein</option>
+            </select>
+            <input name="pinned_slot_id" type="number" placeholder="Pin Slot-ID"
+                   value="{{ row.pinned_slot_id or '' }}" class="w-slot">
+            <label title="Trotz Absage einplanen">
+              <input type="checkbox" name="override" value="true" {% if row.override %}checked{% endif %}> trotzdem
+            </label>
+            <button type="submit" class="btn-sm">Speichern</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Keine Gruppen in der Datenbank.</p>
+    {% endif %}
+  </section>
+{% endblock %}
