@@ -25,6 +25,7 @@ from planer.adapters.db import (
     get_availabilities_for_round,
     get_curations_for_round,
     get_presentations_for_round,
+    get_round,
     get_slots_for_round,
     get_students_in_groups,
     log_email,
@@ -146,6 +147,8 @@ def send_availability_requests(
     """Send the magic-link availability form to every student in an included group."""
     report = SendReport()
     excluded = _excluded_group_ids(session, round_id)
+    rnd = get_round(session, round_id)
+    round_label = rnd.label if rnd else ""
     for student in get_all_students(session):
         if _is_excluded(student, excluded):
             report.excluded.append(student.id)  # group deselected by the admin → no mail
@@ -154,7 +157,10 @@ def send_availability_requests(
             report.skipped.append(student.id)
             continue
         link = _availability_link(base_url, student.id, round_id, secret_key)
-        subject, body = render_mail(KIND_AVAILABILITY, {"name": student.name, "link": link})
+        subject, body = render_mail(
+            KIND_AVAILABILITY,
+            {"name": student.name, "link": link, "round_label": round_label},
+        )
         _deliver(
             session,
             sender,
@@ -182,6 +188,8 @@ def send_reminders(
     report = SendReport()
     excluded = _excluded_group_ids(session, round_id)
     responded = {a.student_id for a in get_availabilities_for_round(session, round_id)}
+    rnd = get_round(session, round_id)
+    round_label = rnd.label if rnd else ""
     for student in get_all_students(session):
         if _is_excluded(student, excluded):
             report.excluded.append(student.id)  # group deselected by the admin → no mail
@@ -192,7 +200,10 @@ def send_reminders(
             report.skipped.append(student.id)
             continue
         link = _availability_link(base_url, student.id, round_id, secret_key)
-        subject, body = render_mail(KIND_REMINDER, {"name": student.name, "link": link})
+        subject, body = render_mail(
+            KIND_REMINDER,
+            {"name": student.name, "link": link, "round_label": round_label},
+        )
         _deliver(
             session,
             sender,

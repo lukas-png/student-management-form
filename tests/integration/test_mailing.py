@@ -97,6 +97,21 @@ class TestRenderMail:
         assert "https://x/availability/tok" in body
         assert "Subject:" not in body
 
+    def test_availability_includes_round_label_when_set(self) -> None:
+        subject, body = render_mail(
+            KIND_AVAILABILITY,
+            {"name": "Alice", "link": "https://x/tok", "round_label": "Blatt 5"},
+        )
+        assert "Blatt 5" in subject
+        assert "Blatt 5" in body
+
+    def test_availability_omits_label_when_empty(self) -> None:
+        subject, _ = render_mail(
+            KIND_AVAILABILITY,
+            {"name": "Alice", "link": "https://x/tok", "round_label": ""},
+        )
+        assert subject == "[Tutorium] Bitte deine Verfügbarkeit eintragen"
+
     def test_assignment_renders_slot(self) -> None:
         subject, body = render_mail(
             "slot_assignment",
