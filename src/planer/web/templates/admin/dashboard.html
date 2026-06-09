@@ -96,6 +96,18 @@
   </form>
   {% if solver_ran %}
   <p><a href="/admin/rounds/{{ current_round.id }}/export.csv">Anwesenheit als CSV exportieren</a></p>
+  <form method="post" action="/admin/rounds/{{ current_round.id }}/sync" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="dry_run" value="1">
+    <button type="submit">Vorschau: Ergebnisse an stu-mgmt</button>
+  </form>
+  <form method="post" action="/admin/rounds/{{ current_round.id }}/sync" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Ergebnisse an stu-mgmt übertragen</button>
+  </form>
+  {% if request.query_params.get('sync') %}
+  <p><small>Sync: {{ request.query_params.get('sync') }}</small></p>
+  {% endif %}
   {% endif %}
 
   <!-- Groups -->

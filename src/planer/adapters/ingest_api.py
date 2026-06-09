@@ -16,12 +16,23 @@ class StuMgmtClient:
         self._auth = auth
 
     def get(self, path: str) -> list | dict:
+        return self._request("GET", path)
+
+    def post(self, path: str, json_body: dict | list) -> list | dict:
+        return self._request("POST", path, json_body)
+
+    def patch(self, path: str, json_body: dict) -> list | dict:
+        return self._request("PATCH", path, json_body)
+
+    def _request(self, method: str, path: str, json_body: dict | list | None = None) -> list | dict:
         url = f"{self._base_url}{path}"
         _auth_retried = False
         for attempt in range(3):
-            resp = httpx.get(
+            resp = httpx.request(
+                method,
                 url,
                 headers={"Authorization": f"Bearer {self._auth.token()}"},
+                json=json_body,
                 timeout=30.0,
             )
             if resp.status_code == 401 and not _auth_retried:

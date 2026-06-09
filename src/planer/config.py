@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     sparky_user: str = ""
     sparky_password: str = ""
     stumgmt_course_id: str = ""
+    stumgmt_presentation_assignment_id: str = ""
+    stumgmt_presentation_assignment_name: str = ""
 
     @field_validator("secret_key")
     @classmethod

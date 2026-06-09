@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -27,6 +28,7 @@ from planer.adapters.db import (
     set_round_mode,
     upsert_curation,
 )
+from planer.adapters.submit_results import submit_presentations
 from planer.config import Settings, get_settings
 from planer.domain.availability import group_feasible_slots, member_declined
 from planer.domain.models import Slot as DomainSlot
@@ -375,6 +377,30 @@ async def run_solver(
 ) -> RedirectResponse:
     solve_round(session, round_id)
     return RedirectResponse(url=f"/admin/rounds/{round_id}", status_code=303)
+
+
+@router.post("/rounds/{round_id}/sync", response_model=None, dependencies=[Depends(require_csrf)])
+async def sync_results(
+    round_id: int,
+    dry_run: str = Form(default=""),
+    session: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    admin: str = Depends(get_admin_user),
+) -> RedirectResponse:
+    is_dry = dry_run.lower() in ("true", "on", "1")
+    try:
+        report = submit_presentations(session, settings, round_id, dry_run=is_dry)
+        summary = (
+            f"{'Vorschau — ' if report.dry_run else ''}neu={len(report.created)} "
+            f"aktualisiert={len(report.updated)} übersprungen={len(report.skipped)} "
+            f"fehlgeschlagen={len(report.failed)}"
+        )
+    except (ValueError, PermissionError) as exc:
+        summary = f"Fehler: {exc}"
+        logger.warning(
+            "sync failed", extra={"round_id": round_id, "admin": admin, "error": str(exc)}
+        )
+    return RedirectResponse(url=f"/admin/rounds/{round_id}?sync={quote(summary)}", status_code=303)
 
 
 @router.get("/rounds/{round_id}/export.csv", response_model=None)

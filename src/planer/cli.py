@@ -15,6 +15,7 @@ from planer.adapters.db import (
 from planer.adapters.ingest_api import fetch_participants
 from planer.adapters.ingest_excel import parse_excel
 from planer.adapters.mail import SmtpMailSender
+from planer.adapters.submit_results import submit_presentations
 from planer.config import get_settings
 from planer.domain.filtering import build_groups
 from planer.logging_setup import configure_logging, get_logger
@@ -130,6 +131,27 @@ def _cmd_remind(args: argparse.Namespace) -> None:
     _print_report(report)
 
 
+def _cmd_sync(args: argparse.Namespace) -> None:
+    settings = _load_settings()
+    engine = make_engine(settings.database_url)
+    with Session(engine) as session:
+        report = submit_presentations(
+            session,
+            settings,
+            args.round_id,
+            force=args.force,
+            dry_run=args.dry_run,
+        )
+    prefix = "DRY-RUN " if report.dry_run else ""
+    print(
+        f"{prefix}assignment={report.assignment_id} created={len(report.created)} "
+        f"updated={len(report.updated)} skipped={len(report.skipped)} "
+        f"failed={len(report.failed)}"
+    )
+    for user_id, error in report.failed:
+        print(f"  FAILED {user_id}: {error}")
+
+
 def _cmd_purge(args: argparse.Namespace) -> None:
     if not args.yes:
         print(
@@ -175,6 +197,16 @@ def main() -> None:
     remind_p.add_argument("round_id", type=int)
     remind_p.add_argument("--force", action="store_true", help="Bypass idempotency skip (resend)")
     remind_p.set_defaults(func=_cmd_remind)
+
+    sync_p = subparsers.add_parser(
+        "sync", help="Write presentation results back to stu-mgmt as assessments"
+    )
+    sync_p.add_argument("round_id", type=int)
+    sync_p.add_argument("--force", action="store_true", help="Update existing assessments (PATCH)")
+    sync_p.add_argument(
+        "--dry-run", action="store_true", help="Show what would be written, make no changes"
+    )
+    sync_p.set_defaults(func=_cmd_sync)
 
     purge_p = subparsers.add_parser("purge", help="Delete a planning round and all its data")
     purge_p.add_argument("--round", dest="round_id", type=int, required=True)

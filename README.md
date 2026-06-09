@@ -9,11 +9,11 @@ automatisch in die nächste Runde.
 
 Strikte Schichtung:
 
-- `domain/` — reine Logik, kein I/O (`models`, `filtering`, `availability`, `scheduling`, `tracking`). mypy strict.
-- `adapters/` — alles I/O (`ingest_excel`, `ingest_api`, `sparky`, `mail`, `db`).
-- `web/` — FastAPI: `public` (Magic-Link-Verfügbarkeit), `tutor` (Anwesenheit), `admin` (Kuration, Solver, Export).
-- `security.py` — Token-Signatur, Admin-Auth, CSRF. `config.py` — Settings (pydantic-settings, fail-fast).
-- `cli.py` — `import`, `plan`, `send`, `remind`, `purge`.
+- `domain/`: reine Logik, kein I/O (`models`, `filtering`, `availability`, `scheduling`, `tracking`, `results_submission`). mypy strict.
+- `adapters/`: alles I/O (`ingest_excel`, `ingest_api`, `sparky`, `mail`, `db`, `submit_results`).
+- `web/`: FastAPI: `public` (Magic-Link-Verfügbarkeit), `tutor` (Anwesenheit), `admin` (Kuration, Solver, Export, stu-mgmt-Sync).
+- `security.py`: Token-Signatur, Admin-Auth, CSRF. `config.py`: Settings (pydantic-settings, fail-fast).
+- `cli.py`: `import`, `plan`, `send`, `remind`, `sync`, `purge`.
 
 ## Setup
 
@@ -56,6 +56,7 @@ Wichtige Variablen:
 | `LOG_JSON` | `true` → ein JSON-Objekt pro Zeile (für Log-Aggregation); `false` → lesbarer Text. |
 | `SMTP_*`, `MAIL_FROM`, `MAIL_REPLY_TO` | Mailversand über STARTTLS. |
 | `STUMGMT_*`, `SPARKY_*` | stu-mgmt-API + Sparkyservice-Auth. |
+| `STUMGMT_PRESENTATION_ASSIGNMENT_ID` / `_NAME` | Ziel-Hausaufgabe für `planer sync`: per ID setzen, oder leer lassen und den exakten Namen angeben. |
 
 ## Entwicklung
 
@@ -77,9 +78,9 @@ Unter Windows direkt:
 
 ### Admin-Bereich erreichen
 
-Im Default-Modus (`forward_auth`) macht die App **keine** eigene Auth-Prüfung —
-`/admin` ist direkt erreichbar. Die Absicherung liegt beim Reverse Proxy /
-Netzwerk: In Produktion läuft die App hinter Nginx/Authentik und wird **nicht**
+Im Default-Modus (`forward_auth`) macht die App **keine** eigene Auth-Prüfung:
+`/admin` ist direkt erreichbar. Die Absicherung liegt beim Reverse Proxy bzw.
+Netzwerk. In Produktion läuft die App hinter Nginx/Authentik und wird **nicht**
 direkt öffentlich exponiert. Ein vorhandener Proxy-Identity-Header wird nur fürs
 Logging gelesen.
 
@@ -100,11 +101,20 @@ planer plan <round>                 # Solver-Lauf für eine Runde
 planer send availability <round>    # Verfügbarkeits-Mails (Magic Link)
 planer send assignment  <round>     # Zuteilungs-Mails
 planer remind <round>               # Erinnerung an Nicht-Antwortende
+planer sync <round>                 # Vorstellungs-Ergebnisse als Assessments ins stu-mgmt schreiben
 planer purge --round <round> --yes  # Runde restlos löschen (Semesterende)
 ```
 
 `send`/`remind` sind idempotent (kein Doppelversand dank `EmailLog`); `--force`
 erzwingt erneuten Versand.
+
+`planer sync <round>` schreibt für jede vorgestellte Gruppe pro Mitglied ein
+Assessment (volle Punktzahl, als Entwurf) auf die konfigurierte Hausaufgabe ins
+stu-mgmt zurück, damit deren verpflichtende Pass-Regel greift. Idempotent pro
+Nutzer: bereits Bewertete werden übersprungen, `--force` aktualisiert sie (PATCH),
+`--dry-run` zeigt nur an, was geschrieben würde. Der API-Account braucht dafür
+Schreibrechte (Lecturer/Tutor) im Kurs; die Assessments entstehen als Entwurf und
+müssen im stu-mgmt-UI final freigegeben werden.
 
 ## Workflow
 
@@ -117,6 +127,7 @@ erzwingt erneuten Versand.
 5. `planer send assignment <round>` → Studierende erhalten ihren Termin.
 6. Tutor:in markiert per slot-spezifischem Magic Link `vorgestellt` / `nicht erschienen`.
 7. CSV-Export aus dem Dashboard. No-Shows wandern automatisch in die nächste Runde.
+8. Optional: `planer sync <round>` (oder Button „Ergebnisse an stu-mgmt übertragen") schreibt die Vorstellungen als Assessments zurück. Vorher mit `--dry-run` bzw. „Vorschau" prüfen.
 
 ## Logging
 
@@ -127,10 +138,10 @@ CLI (`main()`) richten das Logging beim Start ein.
 - **Strukturiert:** jede Log-Zeile trägt Kontextfelder (`student_id`, `group_id`,
   `round_id`, `slot_id`, `admin`, …). Im Textformat als `key=value` angehängt, mit
   `LOG_JSON=true` als ein JSON-Objekt pro Zeile (ideal für Loki/ELK).
-- **PII-frei:** geloggt werden nur IDs — **keine** E-Mail-Adressen oder
+- **PII-frei:** geloggt werden nur IDs, **keine** E-Mail-Adressen oder
   Matrikelnummern. Mail-Fehler landen nur als Exception-*Typ* im Log.
 - **Token-Redaction:** Die Access-Log-Middleware ersetzt Magic-Link-Tokens im Pfad
-  durch `<token>` (`/availability/<token>`, `/tutor/<token>`) — Tokens sind
+  durch `<token>` (`/availability/<token>`, `/tutor/<token>`). Tokens sind
   Credentials und dürfen nie im Klartext im Log stehen.
 
 Was geloggt wird: HTTP-Requests (Methode, redigierter Pfad, Status, Dauer),
