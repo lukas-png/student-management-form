@@ -140,12 +140,21 @@
         <input type="hidden" name="included" value="true">
         <button type="submit">Alle auswählen</button>
       </form>
+      <span class="nav-sep"></span>
+      <form id="bulk-curate-selected" method="post"
+            action="/admin/rounds/{{ current_round.id }}/curate-selected" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" name="included" value="true">Ausgewählte: Ja</button>
+        <button type="submit" name="included" value="false">Ausgewählte: Nein</button>
+      </form>
     </div>
-    <p class="panel-hint">Erst alle abwählen, dann einzelne Gruppen per „Ja" + Speichern wieder zulassen.</p>
+    <p class="panel-hint">Erst alle abwählen, dann einzelne Gruppen per „Ja" + Speichern wieder zulassen.
+       Oder mehrere Gruppen ankreuzen und „Ausgewählte: Ja/Nein" anwenden.</p>
     {% if group_rows %}
     <table>
       <thead>
         <tr>
+          <th><span class="visually-hidden">Auswahl</span></th>
           <th>Gruppe</th>
           <th>Berücksichtigt</th>
           <th>Pinned Slot</th>
@@ -157,6 +166,8 @@
       <tbody>
       {% for row in group_rows %}
       <tr class="{% if not row.included %}excluded{% elif row.is_conflict %}conflict{% elif row.assigned_slot_id %}assigned{% endif %}">
+        <td><input type="checkbox" name="group_ids" value="{{ row.group_id }}"
+                   form="bulk-curate-selected" aria-label="Gruppe auswählen"></td>
         <td>{{ row.group_name }} <small>({{ row.group_id }})</small></td>
         <td>{% if row.included %}Ja{% else %}Nein{% endif %}</td>
         <td>{{ row.pinned_slot_id or '–' }}</td>

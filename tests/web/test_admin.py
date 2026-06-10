@@ -530,6 +530,55 @@ class TestBulkCurationAndMode:
             curs = get_curations_for_round(sess, round_id)
         assert curs and all(c.included is True for c in curs)
 
+    def test_curate_selected_includes_subset(
+        self,
+        client: TestClient,
+        test_engine,  # type: ignore[no-untyped-def]
+    ) -> None:
+        with Session(test_engine) as sess:
+            upsert_students(sess, [_participant("u1", "g1"), _participant("u2", "g2")])
+            upsert_groups(
+                sess,
+                [
+                    DomainGroup(id="g1", name="G1", members=()),
+                    DomainGroup(id="g2", name="G2", members=()),
+                ],
+            )
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            round_id = rnd.id
+
+        client.post(
+            f"/admin/rounds/{round_id}/curate-selected",
+            data={"included": "true", "group_ids": ["g1"]},
+        )
+        with Session(test_engine) as sess:
+            curs = {c.group_id: c.included for c in get_curations_for_round(sess, round_id)}
+        assert curs.get("g1") is True
+        assert curs.get("g2") is not True
+
+    def test_curate_selected_empty_is_noop(
+        self,
+        client: TestClient,
+        test_engine,  # type: ignore[no-untyped-def]
+    ) -> None:
+        with Session(test_engine) as sess:
+            upsert_students(sess, [_participant("u1", "g1")])
+            upsert_groups(sess, [DomainGroup(id="g1", name="G1", members=())])
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            round_id = rnd.id
+
+        resp = client.post(
+            f"/admin/rounds/{round_id}/curate-selected",
+            data={"included": "false"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        with Session(test_engine) as sess:
+            curs = get_curations_for_round(sess, round_id)
+        assert curs == []
+
     def test_set_mode_confirm(
         self,
         client: TestClient,

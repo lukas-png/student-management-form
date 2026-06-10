@@ -355,6 +355,33 @@ async def curate_all(
 
 
 @router.post(
+    "/rounds/{round_id}/curate-selected",
+    response_model=None,
+    dependencies=[Depends(require_csrf)],
+)
+async def curate_selected(
+    round_id: int,
+    included: str = Form(...),
+    group_ids: list[str] = Form(default=[]),
+    session: Session = Depends(get_db),
+    admin: str = Depends(get_admin_user),
+) -> RedirectResponse:
+    is_included = included.lower() == "true"
+    if group_ids:
+        set_all_curations_included(session, round_id, group_ids, included=is_included)
+    logger.info(
+        "bulk curation (selected)",
+        extra={
+            "round_id": round_id,
+            "included": is_included,
+            "count": len(group_ids),
+            "admin": admin,
+        },
+    )
+    return RedirectResponse(url=f"/admin/rounds/{round_id}", status_code=303)
+
+
+@router.post(
     "/rounds/{round_id}/mode",
     response_model=None,
     dependencies=[Depends(require_csrf)],
