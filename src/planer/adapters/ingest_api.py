@@ -45,6 +45,8 @@ class StuMgmtClient:
                 time.sleep(2**attempt)
                 continue
             resp.raise_for_status()
+            if resp.status_code == 204 or not resp.content:
+                return {}
             return resp.json()  # type: ignore[return-value]
         raise RuntimeError("max retries exceeded")  # unreachable
 

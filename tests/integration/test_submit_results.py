@@ -141,6 +141,37 @@ def test_no_show_member_is_not_written(session: Session, round_with_presentation
 
 
 @respx.mock
+def test_bulk_empty_body_is_success_not_failure(
+    session: Session, round_with_presentations: int
+) -> None:
+    """Live stu-mgmt returns 201 with an empty body; json() must not blow up."""
+    respx.post(_SPARKY_URL).mock(return_value=httpx.Response(200, json={"token": _jwt()}))
+    respx.get(_ASSIGNMENTS).mock(
+        return_value=httpx.Response(200, json=[{"id": "a1", "name": "V", "points": 1}])
+    )
+    respx.get(_ASSESSMENTS).mock(return_value=httpx.Response(200, json=[]))
+    respx.post(_BULK).mock(return_value=httpx.Response(201))  # no body
+
+    report = submit_presentations(session, _settings(), round_with_presentations)
+
+    assert sorted(report.created) == ["u1", "u2", "u4"]
+    assert report.failed == []
+
+
+@respx.mock
+def test_force_patch_empty_body_is_success(
+    session: Session, round_with_presentations: int
+) -> None:
+    """A 204 No Content on PATCH must count as updated, not failed."""
+    _mock(existing=[{"id": "as1", "userId": "u1"}])
+    respx.patch(f"{_ASSESSMENTS}/as1").mock(return_value=httpx.Response(204))
+    report = submit_presentations(session, _settings(), round_with_presentations, force=True)
+
+    assert report.updated == ["u1"]
+    assert report.failed == []
+
+
+@respx.mock
 def test_idempotency_skips_already_assessed(
     session: Session, round_with_presentations: int
 ) -> None:
