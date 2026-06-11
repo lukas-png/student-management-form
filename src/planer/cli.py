@@ -72,6 +72,8 @@ def _cmd_import(args: argparse.Namespace) -> None:
             settings.sparky_auth_url,
             settings.sparky_user,
             settings.sparky_password,
+            presentation_assignment_id=settings.stumgmt_presentation_assignment_id,
+            presentation_assignment_name=settings.stumgmt_presentation_assignment_name,
         )
     groups = build_groups(participants)
     engine = make_engine(settings.database_url)
@@ -90,7 +92,7 @@ def _cmd_plan(args: argparse.Namespace) -> None:
     settings = _load_settings()
     engine = make_engine(settings.database_url)
     with Session(engine) as session:
-        result = solve_round(session, args.round_id)
+        result = solve_round(session, args.round_id, settings.individual_threshold)
     print(f"Assigned {len(result.assignments)} group(s); {len(result.unplaced)} unplaced.")
     for group_id, reason in result.unplaced:
         print(f"  UNPLACED {group_id}: {reason}")

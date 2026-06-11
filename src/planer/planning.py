@@ -23,6 +23,7 @@ from planer.adapters.db import (
     get_students_in_groups,
 )
 from planer.domain.availability import group_feasible_slots, member_declined
+from planer.domain.filtering import is_due
 from planer.domain.models import Slot as DomainSlot
 from planer.domain.scheduling import ScheduleResult, assign
 from planer.domain.tracking import compute_carry_over
@@ -31,8 +32,13 @@ from planer.logging_setup import get_logger
 logger = get_logger("planning")
 
 
-def solve_round(session: Session, round_id: int) -> ScheduleResult:
-    """Run the solver for a round and persist its Presentations (replacing any prior run)."""
+def solve_round(session: Session, round_id: int, threshold: int) -> ScheduleResult:
+    """Run the solver for a round and persist its Presentations (replacing any prior run).
+
+    Only *due* groups are scheduled: a group is kept when at least one member is
+    still due (``is_due`` with ``threshold``). Members with an Altzulassung or an
+    existing assessment are not due, so a fully-covered group drops out.
+    """
     rnd = get_round(session, round_id)
     require_all = rnd is None or rnd.quorum != "any"
     slots = get_slots_for_round(session, round_id)
@@ -62,7 +68,15 @@ def solve_round(session: Session, round_id: int) -> ScheduleResult:
         for dg in domain_groups
         if (curations.get(dg.id) is None or curations[dg.id].included)
         and dg.id not in carry.excluded
+        and any(is_due(m, threshold) for m in dg.members)
     ]
+    excluded_not_due = sum(
+        1
+        for dg in domain_groups
+        if (curations.get(dg.id) is None or curations[dg.id].included)
+        and dg.id not in carry.excluded
+        and not any(is_due(m, threshold) for m in dg.members)
+    )
 
     feasible: dict[str, set[str]] = {
         dg.id: group_feasible_slots(dg, avail_dict, domain_slots, require_all=require_all)
@@ -101,6 +115,7 @@ def solve_round(session: Session, round_id: int) -> ScheduleResult:
             "assigned": len(result.assignments),
             "unplaced": len(result.unplaced),
             "excluded_carry_over": len(carry.excluded),
+            "excluded_not_due": excluded_not_due,
         },
     )
     if result.unplaced:

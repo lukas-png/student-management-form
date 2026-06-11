@@ -101,6 +101,25 @@ class TestToParticipants:
         p = to_participants(sample_admission_status, sample_groups)[0]
         assert isinstance(p.matr_nr, str)
 
+    def test_altzulassung_parsed(self, sample_groups: list[dict]) -> None:
+        admission = [
+            {
+                "participant": {"userId": "u1", "displayName": "X", "email": "x@x", "matrNr": 1},
+                "hasAdmission": True,
+                "hasAdmissionFromPreviousSemester": True,
+                "results": [],
+            }
+        ]
+        p = to_participants(admission, sample_groups)[0]
+        assert p.has_admission_from_previous_semester is True
+
+    def test_altzulassung_defaults_false_when_missing(
+        self, sample_admission_status: list[dict], sample_groups: list[dict]
+    ) -> None:
+        p = to_participants(sample_admission_status, sample_groups)[0]
+        assert p.has_admission_from_previous_semester is False
+        assert p.has_assessment is False
+
 
 # --- StuMgmtAuth ---
 
@@ -260,6 +279,38 @@ def test_fetch_participants_sends_bearer_token(
     fetch_participants(_API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass")
     call = respx.get(f"{_API_URL}{_ADMISSION_PATH}").calls[0]
     assert call.request.headers["authorization"] == f"Bearer {_FRESH_JWT}"
+
+
+@respx.mock
+def test_fetch_participants_enriches_has_assessment(
+    sample_admission_status: list[dict], sample_groups: list[dict]
+) -> None:
+    _mock_api(sample_admission_status, sample_groups)
+    respx.get(f"{_API_URL}/courses/{_COURSE_ID}/assignments").mock(
+        return_value=httpx.Response(200, json=[{"id": "a1", "name": "Vorstellung", "points": 10}])
+    )
+    respx.get(f"{_API_URL}/courses/{_COURSE_ID}/assignments/a1/assessments").mock(
+        return_value=httpx.Response(200, json=[{"id": "as1", "userId": "u1"}])
+    )
+    participants = fetch_participants(
+        _API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass", presentation_assignment_id="a1"
+    )
+    by_id = {p.user_id: p for p in participants}
+    assert by_id["u1"].has_assessment is True
+    assert by_id["u2"].has_assessment is False
+
+
+@respx.mock
+def test_fetch_participants_skips_enrichment_without_assignment(
+    sample_admission_status: list[dict], sample_groups: list[dict]
+) -> None:
+    _mock_api(sample_admission_status, sample_groups)
+    assignments_route = respx.get(f"{_API_URL}/courses/{_COURSE_ID}/assignments")
+    fetch_participants(_API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass")
+    assert assignments_route.call_count == 0
+    # no assignment configured → nobody flagged
+    fetched = fetch_participants(_API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass")
+    assert all(p.has_assessment is False for p in fetched)
 
 
 @respx.mock

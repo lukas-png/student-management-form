@@ -202,6 +202,7 @@ form.inline, form[style*="inline"] { display: inline; }
 .excluded { color: var(--muted); }
 .conflict { background: var(--conflict-bg); }
 .assigned { background: var(--ok-bg); }
+.not-due { color: var(--muted); background: var(--bg); }
 
 /* Misc helpers ----------------------------------------------------------- */
 .nav {
@@ -254,7 +255,14 @@ details > summary {
   margin-bottom: .8rem;
   background: var(--surface);
 }
-.members { color: var(--muted); font-size: .9rem; margin-top: .15rem; }
+.members { color: var(--muted); font-size: .9rem; }
+.members > summary { margin: 0; font-weight: 500; }
+.group-main > td { border-bottom: none; }
+.group-detail > td { padding-top: 0; }
+.members-table { width: auto; font-size: .85rem; margin: .35rem 0 .15rem; }
+.members-table th, .members-table td { padding: .2rem .65rem; border-bottom: none; }
+.members-table thead th { border-bottom: 1px solid var(--border); }
+.members-table tr:hover { background: transparent; }
 .choices-inline { display: flex; flex-wrap: wrap; gap: 1.2rem; margin-top: .6rem; }
 .choices-inline label { cursor: pointer; }
 

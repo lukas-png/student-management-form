@@ -159,9 +159,7 @@ def test_bulk_empty_body_is_success_not_failure(
 
 
 @respx.mock
-def test_force_patch_empty_body_is_success(
-    session: Session, round_with_presentations: int
-) -> None:
+def test_force_patch_empty_body_is_success(session: Session, round_with_presentations: int) -> None:
     """A 204 No Content on PATCH must count as updated, not failed."""
     _mock(existing=[{"id": "as1", "userId": "u1"}])
     respx.patch(f"{_ASSESSMENTS}/as1").mock(return_value=httpx.Response(204))

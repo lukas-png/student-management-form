@@ -156,6 +156,7 @@
         <tr>
           <th><span class="visually-hidden">Auswahl</span></th>
           <th>Gruppe</th>
+          <th>Fällig</th>
           <th>Berücksichtigt</th>
           <th>Pinned Slot</th>
           <th>Verfügbare Slots</th>
@@ -165,10 +166,12 @@
       </thead>
       <tbody>
       {% for row in group_rows %}
-      <tr class="{% if not row.included %}excluded{% elif row.is_conflict %}conflict{% elif row.assigned_slot_id %}assigned{% endif %}">
+      {% set state = 'excluded' if not row.included else ('conflict' if row.is_conflict else ('not-due' if not row.is_due else ('assigned' if row.assigned_slot_id else ''))) %}
+      <tr class="group-main {{ state }}">
         <td><input type="checkbox" name="group_ids" value="{{ row.group_id }}"
                    form="bulk-curate-selected" aria-label="Gruppe auswählen"></td>
         <td>{{ row.group_name }} <small>({{ row.group_id }})</small></td>
+        <td>{% if row.is_due %}<span class="badge-ok">Ja</span>{% else %}Nein{% endif %}</td>
         <td>{% if row.included %}Ja{% else %}Nein{% endif %}</td>
         <td>{{ row.pinned_slot_id or '–' }}</td>
         <td>
@@ -198,6 +201,31 @@
             </label>
             <button type="submit" class="btn-sm">Speichern</button>
           </form>
+        </td>
+      </tr>
+      <tr class="group-detail {{ state }}">
+        <td></td>
+        <td colspan="7">
+          <details class="members">
+            <summary>{{ row.members | length }} Mitglied(er)</summary>
+            <table class="members-table">
+              <thead>
+                <tr><th>Name</th><th>Zulassung</th><th>Altzulassung</th><th>Assessment</th><th>Punkte</th><th>Fällig</th></tr>
+              </thead>
+              <tbody>
+              {% for m in row.members %}
+                <tr>
+                  <td>{{ m.name }}</td>
+                  <td>{% if m.has_admission %}✓{% else %}✗{% endif %}</td>
+                  <td>{% if m.has_admission_from_previous_semester %}✓{% else %}–{% endif %}</td>
+                  <td>{% if m.has_assessment %}✓{% else %}–{% endif %}</td>
+                  <td>{{ m.achieved_points }}</td>
+                  <td>{% if m.is_due %}Ja{% else %}Nein{% endif %}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </details>
         </td>
       </tr>
       {% endfor %}

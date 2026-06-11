@@ -7,8 +7,9 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
+from planer.domain.filtering import _ASSIGNMENT_TYPE, _RULE, individual_result
 from planer.domain.models import Group as DomainGroup
-from planer.domain.models import Participant, resolve_group_id
+from planer.domain.models import Participant, Result, resolve_group_id
 
 
 def _now() -> datetime:
@@ -37,6 +38,10 @@ class Student(SQLModel, table=True):
     email: str
     matr_nr: str
     group_id: str = ""
+    has_admission: bool = False
+    has_admission_from_previous_semester: bool = False
+    has_assessment: bool = False
+    achieved_points: int = 0
 
 
 class Group(SQLModel, table=True):
@@ -142,6 +147,16 @@ def _ensure_columns(engine: Engine) -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE curation ADD COLUMN override BOOLEAN NOT NULL DEFAULT 0"
             )
+        student_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(student)")}
+        for col in ("has_admission", "has_admission_from_previous_semester", "has_assessment"):
+            if col not in student_cols:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE student ADD COLUMN {col} BOOLEAN NOT NULL DEFAULT 0"
+                )
+        if "achieved_points" not in student_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE student ADD COLUMN achieved_points INTEGER NOT NULL DEFAULT 0"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +166,7 @@ def _ensure_columns(engine: Engine) -> None:
 
 def upsert_students(session: Session, participants: list[Participant]) -> None:
     for p in participants:
+        result = individual_result(p)
         session.merge(
             Student(
                 id=p.user_id,
@@ -158,6 +174,10 @@ def upsert_students(session: Session, participants: list[Participant]) -> None:
                 email=p.email,
                 matr_nr=p.matr_nr,
                 group_id=resolve_group_id(p),
+                has_admission=p.has_admission,
+                has_admission_from_previous_semester=p.has_admission_from_previous_semester,
+                has_assessment=p.has_assessment,
+                achieved_points=result.achieved_points if result else 0,
             )
         )
     session.commit()
@@ -423,6 +443,12 @@ def build_domain_groups(db_groups: list[Group], db_students: list[Student]) -> l
 
     members_by_group: defaultdict[str, list[Participant]] = defaultdict(list)
     for s in db_students:
+        synthetic_result = Result(
+            rule=_RULE,
+            assignment_type=_ASSIGNMENT_TYPE,
+            achieved_points=s.achieved_points,
+            passed=False,
+        )
         members_by_group[s.group_id].append(
             Participant(
                 user_id=s.id,
@@ -431,8 +457,10 @@ def build_domain_groups(db_groups: list[Group], db_students: list[Student]) -> l
                 matr_nr=s.matr_nr,
                 group_id=s.group_id,
                 group_name="",
-                has_admission=False,
-                results=(),
+                has_admission=s.has_admission,
+                has_admission_from_previous_semester=s.has_admission_from_previous_semester,
+                has_assessment=s.has_assessment,
+                results=(synthetic_result,),
             )
         )
     return [

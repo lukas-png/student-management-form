@@ -29,6 +29,8 @@ def _participant(
     group_id: str = "g1",
     group_name: str = "Group 1",
     has_admission: bool = True,
+    has_admission_from_previous_semester: bool = False,
+    has_assessment: bool = False,
     results: tuple[Result, ...] = (),
 ) -> Participant:
     return Participant(
@@ -39,6 +41,8 @@ def _participant(
         group_id=group_id,
         group_name=group_name,
         has_admission=has_admission,
+        has_admission_from_previous_semester=has_admission_from_previous_semester,
+        has_assessment=has_assessment,
         results=results,
     )
 
@@ -68,8 +72,23 @@ class TestIsDue:
         p = _participant(results=(_result(achieved_points=5),))
         assert is_due(p, THRESHOLD) is False
 
-    def test_no_admission_returns_false_even_below_threshold(self) -> None:
+    def test_no_admission_still_due_below_threshold(self) -> None:
+        # has_admission is NOT required: admission can still be earned via the
+        # presentation, so a below-threshold student without admission stays due.
         p = _participant(has_admission=False, results=(_result(achieved_points=0),))
+        assert is_due(p, THRESHOLD) is True
+
+    def test_altzulassung_returns_false(self) -> None:
+        # Admission carried over from a previous semester → never due.
+        p = _participant(
+            has_admission_from_previous_semester=True,
+            results=(_result(achieved_points=0),),
+        )
+        assert is_due(p, THRESHOLD) is False
+
+    def test_existing_assessment_returns_false(self) -> None:
+        # Already examined (assessment exists on the presentation assignment).
+        p = _participant(has_assessment=True, results=(_result(achieved_points=0),))
         assert is_due(p, THRESHOLD) is False
 
     def test_rule_matched_by_name_not_index(self) -> None:

@@ -17,7 +17,12 @@ from datetime import date
 
 from sqlmodel import Session
 
-from planer.adapters.ingest_api import StuMgmtClient
+from planer.adapters.ingest_api import (
+    StuMgmtClient,
+    existing_assessments_by_user,
+    points_of,
+    resolve_assignment,
+)
 from planer.adapters.sparky import StuMgmtAuth
 from planer.config import Settings
 from planer.domain.results_submission import build_assessments
@@ -36,67 +41,6 @@ class SubmitReport:
     dry_run: bool = False
 
 
-def _points_of(assignment: dict) -> int:
-    return int(assignment.get("points", 0) or 0)
-
-
-def _resolve_assignment(client: StuMgmtClient, course_id: str, settings: Settings) -> dict:
-    """Find the target assignment by configured id, else by exact name.
-
-    Fails fast (ValueError) when nothing is configured, the id is unknown, or a
-    name matches zero / more than one assignment.
-    """
-    want_id = settings.stumgmt_presentation_assignment_id.strip()
-    want_name = settings.stumgmt_presentation_assignment_name.strip()
-    if not want_id and not want_name:
-        raise ValueError(
-            "No presentation assignment configured — set "
-            "STUMGMT_PRESENTATION_ASSIGNMENT_ID or STUMGMT_PRESENTATION_ASSIGNMENT_NAME"
-        )
-    assignments = client.get(f"/courses/{course_id}/assignments")
-    if not isinstance(assignments, list):
-        raise ValueError("Unexpected /assignments response (expected a list)")
-
-    if want_id:
-        match = next((a for a in assignments if str(a.get("id")) == want_id), None)
-        if match is None:
-            raise ValueError(f"Assignment id {want_id!r} not found in course {course_id}")
-        return match
-
-    matches = [a for a in assignments if a.get("name") == want_name]
-    if len(matches) != 1:
-        raise ValueError(
-            f"Assignment name {want_name!r} matched {len(matches)} assignments "
-            "(need exactly one) — use STUMGMT_PRESENTATION_ASSIGNMENT_ID instead"
-        )
-    return matches[0]
-
-
-def _assessment_user_id(entry: dict) -> str | None:
-    """User id an existing assessment belongs to, across known response shapes."""
-    uid = entry.get("userId")
-    if uid:
-        return str(uid)
-    participant = entry.get("participant") or entry.get("user")
-    if isinstance(participant, dict) and participant.get("userId"):
-        return str(participant["userId"])
-    if isinstance(participant, dict) and participant.get("id"):
-        return str(participant["id"])
-    return None
-
-
-def _existing_by_user(client: StuMgmtClient, course_id: str, assignment_id: str) -> dict[str, str]:
-    """Map user_id -> assessment_id for assessments that already exist."""
-    existing = client.get(f"/courses/{course_id}/assignments/{assignment_id}/assessments")
-    result: dict[str, str] = {}
-    if isinstance(existing, list):
-        for entry in existing:
-            uid = _assessment_user_id(entry)
-            if uid and entry.get("id"):
-                result[uid] = str(entry["id"])
-    return result
-
-
 def submit_presentations(
     session: Session,
     settings: Settings,
@@ -113,9 +57,14 @@ def submit_presentations(
     auth = StuMgmtAuth(settings.sparky_auth_url, settings.sparky_user, settings.sparky_password)
     client = StuMgmtClient(settings.stumgmt_api_url, auth)
 
-    assignment = _resolve_assignment(client, course_id, settings)
+    assignment = resolve_assignment(
+        client,
+        course_id,
+        want_id=settings.stumgmt_presentation_assignment_id,
+        want_name=settings.stumgmt_presentation_assignment_name,
+    )
     assignment_id = str(assignment["id"])
-    points = _points_of(assignment)
+    points = points_of(assignment)
     report = SubmitReport(assignment_id=assignment_id, dry_run=dry_run)
 
     # Members per group, using the same "solo students group under their own id"
@@ -131,7 +80,7 @@ def submit_presentations(
     payloads = build_assessments(presentations, members_by_group, points, comment)
 
     # Read-only; safe in dry-run too and makes the preview's skipped/created accurate.
-    existing = _existing_by_user(client, course_id, assignment_id)
+    existing = existing_assessments_by_user(client, course_id, assignment_id)
 
     to_create: list[dict] = []
     for pl in payloads:

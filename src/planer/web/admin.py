@@ -32,6 +32,7 @@ from planer.adapters.db import (
 from planer.adapters.submit_results import submit_presentations
 from planer.config import Settings, get_settings
 from planer.domain.availability import group_feasible_slots, member_declined
+from planer.domain.filtering import individual_result, is_due
 from planer.domain.models import Slot as DomainSlot
 from planer.export import build_export_rows, rows_to_csv
 from planer.logging_setup import get_logger
@@ -125,6 +126,16 @@ def _csrf_render(
 
 
 @dataclass
+class MemberRow:
+    name: str
+    has_admission: bool
+    has_admission_from_previous_semester: bool
+    has_assessment: bool
+    achieved_points: int
+    is_due: bool
+
+
+@dataclass
 class GroupRow:
     group_id: str
     group_name: str
@@ -134,6 +145,8 @@ class GroupRow:
     assigned_slot_id: int | None
     is_conflict: bool
     override: bool
+    is_due: bool
+    members: list[MemberRow]
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +216,7 @@ async def round_dashboard(
     domain_groups = build_domain_groups(db_groups, db_students)
 
     require_all = current_round.quorum != "any"
+    threshold = settings.individual_threshold
     group_rows: list[GroupRow] = []
     for dg in domain_groups:
         cur: Curation | None = curations.get(dg.id)
@@ -218,6 +232,17 @@ async def round_dashboard(
             and member_declined(dg, str(pinned_slot_id), avail_dict, require_all=require_all)
             and not override
         )
+        members = [
+            MemberRow(
+                name=m.display_name,
+                has_admission=m.has_admission,
+                has_admission_from_previous_semester=m.has_admission_from_previous_semester,
+                has_assessment=m.has_assessment,
+                achieved_points=ir.achieved_points if (ir := individual_result(m)) else 0,
+                is_due=is_due(m, threshold),
+            )
+            for m in dg.members
+        ]
         group_rows.append(
             GroupRow(
                 group_id=dg.id,
@@ -228,6 +253,8 @@ async def round_dashboard(
                 assigned_slot_id=pres.slot_id if pres else None,
                 is_conflict=is_conflict,
                 override=override,
+                is_due=any(mr.is_due for mr in members),
+                members=members,
             )
         )
 
@@ -421,9 +448,10 @@ async def set_quorum(
 async def run_solver(
     round_id: int,
     session: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
     _admin: str = Depends(get_admin_user),
 ) -> RedirectResponse:
-    solve_round(session, round_id)
+    solve_round(session, round_id, settings.individual_threshold)
     return RedirectResponse(url=f"/admin/rounds/{round_id}", status_code=303)
 
 

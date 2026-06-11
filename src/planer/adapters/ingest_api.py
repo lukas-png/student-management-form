@@ -1,4 +1,5 @@
 import time
+from dataclasses import replace
 
 import httpx
 
@@ -57,18 +58,114 @@ def fetch_participants(
     auth_url: str,
     sparky_user: str,
     sparky_password: str,
+    presentation_assignment_id: str = "",
+    presentation_assignment_name: str = "",
 ) -> list[Participant]:
     """Fetch course participants from stu-mgmt and merge them into domain objects.
 
-    Two reads (verified against the live stu-mgmt OpenAPI):
-      - GET /courses/{id}/admission-status → identity + hasAdmission + results[]
+    Reads (verified against the live stu-mgmt OpenAPI):
+      - GET /courses/{id}/admission-status → identity + hasAdmission
+        + hasAdmissionFromPreviousSemester + results[]
       - GET /courses/{id}/groups           → group membership per user
+
+    If a presentation assignment is configured, a third read marks everyone who
+    already has an assessment there (``has_assessment=True``) so the planner can
+    treat them as already examined. Skipped when no assignment is configured.
     """
     auth = StuMgmtAuth(auth_url, sparky_user, sparky_password)
     client = StuMgmtClient(api_url, auth)
     admission = client.get(f"/courses/{course_id}/admission-status")
     groups = client.get(f"/courses/{course_id}/groups")
-    return to_participants(admission, groups)  # type: ignore[arg-type]
+    participants = to_participants(admission, groups)  # type: ignore[arg-type]
+
+    if presentation_assignment_id.strip() or presentation_assignment_name.strip():
+        assignment = resolve_assignment(
+            client,
+            course_id,
+            want_id=presentation_assignment_id,
+            want_name=presentation_assignment_name,
+        )
+        assessed = set(existing_assessments_by_user(client, course_id, str(assignment["id"])))
+        if assessed:
+            participants = [
+                replace(p, has_assessment=True) if p.user_id in assessed else p
+                for p in participants
+            ]
+    return participants
+
+
+# ---------------------------------------------------------------------------
+# Assessment reads (shared with the results-sync adapter)
+# ---------------------------------------------------------------------------
+
+
+def points_of(assignment: dict) -> int:
+    return int(assignment.get("points", 0) or 0)
+
+
+def resolve_assignment(
+    client: StuMgmtClient,
+    course_id: str,
+    *,
+    want_id: str = "",
+    want_name: str = "",
+) -> dict:
+    """Find the target assignment by configured id, else by exact name.
+
+    Fails fast (ValueError) when nothing is configured, the id is unknown, or a
+    name matches zero / more than one assignment.
+    """
+    want_id = want_id.strip()
+    want_name = want_name.strip()
+    if not want_id and not want_name:
+        raise ValueError(
+            "No presentation assignment configured — set "
+            "STUMGMT_PRESENTATION_ASSIGNMENT_ID or STUMGMT_PRESENTATION_ASSIGNMENT_NAME"
+        )
+    assignments = client.get(f"/courses/{course_id}/assignments")
+    if not isinstance(assignments, list):
+        raise ValueError("Unexpected /assignments response (expected a list)")
+
+    if want_id:
+        match = next((a for a in assignments if str(a.get("id")) == want_id), None)
+        if match is None:
+            raise ValueError(f"Assignment id {want_id!r} not found in course {course_id}")
+        return match
+
+    matches = [a for a in assignments if a.get("name") == want_name]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Assignment name {want_name!r} matched {len(matches)} assignments "
+            "(need exactly one) — use STUMGMT_PRESENTATION_ASSIGNMENT_ID instead"
+        )
+    return matches[0]
+
+
+def _assessment_user_id(entry: dict) -> str | None:
+    """User id an existing assessment belongs to, across known response shapes."""
+    uid = entry.get("userId")
+    if uid:
+        return str(uid)
+    participant = entry.get("participant") or entry.get("user")
+    if isinstance(participant, dict) and participant.get("userId"):
+        return str(participant["userId"])
+    if isinstance(participant, dict) and participant.get("id"):
+        return str(participant["id"])
+    return None
+
+
+def existing_assessments_by_user(
+    client: StuMgmtClient, course_id: str, assignment_id: str
+) -> dict[str, str]:
+    """Map user_id -> assessment_id for assessments that already exist."""
+    existing = client.get(f"/courses/{course_id}/assignments/{assignment_id}/assessments")
+    result: dict[str, str] = {}
+    if isinstance(existing, list):
+        for entry in existing:
+            uid = _assessment_user_id(entry)
+            if uid and entry.get("id"):
+                result[uid] = str(entry["id"])
+    return result
 
 
 def to_participants(
@@ -111,6 +208,9 @@ def to_participants(
                 group_id=group_id,
                 group_name=group_name,
                 has_admission=parse_bool(entry["hasAdmission"]),  # type: ignore[arg-type]
+                has_admission_from_previous_semester=parse_bool(
+                    entry.get("hasAdmissionFromPreviousSemester", False)  # type: ignore[arg-type]
+                ),
                 results=results,
             )
         )

@@ -1,14 +1,14 @@
 from collections import defaultdict
 
-from planer.domain.models import Group, Participant, resolve_group_id
+from planer.domain.models import Group, Participant, Result, resolve_group_id
 
 _RULE = "INDIVIDUAL_PERCENT_WITH_ALLOWED_FAILURES"
 _ASSIGNMENT_TYPE = "HOMEWORK"
 
 
-def is_due(participant: Participant, threshold: int) -> bool:
-    """True if participant is below the threshold in the INDIVIDUAL_PERCENT rule."""
-    result = next(
+def individual_result(participant: Participant) -> Result | None:
+    """The INDIVIDUAL_PERCENT homework result, matched by rule name (never index)."""
+    return next(
         (
             r
             for r in participant.results
@@ -16,9 +16,26 @@ def is_due(participant: Participant, threshold: int) -> bool:
         ),
         None,
     )
-    if result is None:
+
+
+def is_due(participant: Participant, threshold: int) -> bool:
+    """True if the participant still has to present.
+
+    Criterion is the homework points only: ``achieved_points < threshold``.
+    ``has_admission`` is deliberately NOT required — a student without admission
+    can still earn it via the homework/presentation, so they remain due.
+
+    Excluded (never due) regardless of points:
+      - Altzulassung (``has_admission_from_previous_semester``) — already admitted
+        from an earlier semester, need not present.
+      - An assessment already exists on the presentation assignment — already examined.
+    """
+    if participant.has_admission_from_previous_semester:
         return False
-    if not participant.has_admission:
+    if participant.has_assessment:
+        return False
+    result = individual_result(participant)
+    if result is None:
         return False
     return result.achieved_points < threshold
 

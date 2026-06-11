@@ -69,6 +69,9 @@ def parse_excel(path: Path) -> list[Participant]:
             group_id=str(p.get("groupId") or ""),
             group_name=str(p.get("groupName") or ""),
             has_admission=parse_bool(p["hasAdmission"]),  # type: ignore[arg-type]
+            has_admission_from_previous_semester=parse_bool(
+                p.get("hasAdmissionFromPreviousSemester") or False  # type: ignore[arg-type]
+            ),
             results=tuple(user_results[str(p["userId"])]),
         )
         for p in by_user.values()

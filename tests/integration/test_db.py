@@ -162,6 +162,63 @@ class TestGroups:
         assert domain_groups[0].id == "solo1"
         assert [m.user_id for m in domain_groups[0].members] == ["solo1"]
 
+    def test_admission_assessment_fields_round_trip(self, session: Session) -> None:
+        # Persisted admission/assessment flags + points must reconstruct so that
+        # is_due() behaves the same after a reload as it did at import.
+        from planer.domain.filtering import _ASSIGNMENT_TYPE, _RULE, is_due
+        from planer.domain.models import Result
+
+        def _hw(points: int) -> tuple[Result, ...]:
+            return (Result(_RULE, _ASSIGNMENT_TYPE, achieved_points=points, passed=False),)
+
+        due = Participant(
+            user_id="due1",
+            display_name="Due",
+            email="due@uni.de",
+            matr_nr="1",
+            group_id="g1",
+            group_name="G1",
+            has_admission=False,
+            results=_hw(1),
+        )
+        alt = Participant(
+            user_id="alt1",
+            display_name="Alt",
+            email="alt@uni.de",
+            matr_nr="2",
+            group_id="g2",
+            group_name="G2",
+            has_admission=True,
+            has_admission_from_previous_semester=True,
+            results=_hw(0),
+        )
+        assessed = Participant(
+            user_id="ass1",
+            display_name="Assessed",
+            email="ass@uni.de",
+            matr_nr="3",
+            group_id="g3",
+            group_name="G3",
+            has_admission=True,
+            has_assessment=True,
+            results=_hw(0),
+        )
+        upsert_students(session, [due, alt, assessed])
+        upsert_groups(session, build_groups([due, alt, assessed]))
+
+        db_groups = get_all_groups(session)
+        db_students = get_students_in_groups(session, [g.id for g in db_groups])
+        by_uid = {
+            m.user_id: m for g in build_domain_groups(db_groups, db_students) for m in g.members
+        }
+
+        assert is_due(by_uid["due1"], threshold=3) is True
+        assert is_due(by_uid["alt1"], threshold=3) is False  # Altzulassung
+        assert is_due(by_uid["ass1"], threshold=3) is False  # already assessed
+        assert by_uid["due1"].results[0].achieved_points == 1
+        assert by_uid["alt1"].has_admission_from_previous_semester is True
+        assert by_uid["ass1"].has_assessment is True
+
 
 # ---------------------------------------------------------------------------
 # Planning Rounds

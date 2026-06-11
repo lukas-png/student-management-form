@@ -19,6 +19,12 @@ class Participant:
     group_name: str
     has_admission: bool
     results: tuple[Result, ...]
+    # Admission carried over from a previous semester ("Altzulassung"): such a
+    # student already has admission and need not present → never due.
+    has_admission_from_previous_semester: bool = False
+    # An assessment already exists on the presentation assignment in stu-mgmt
+    # ("schon geprüft") → already examined, never due.
+    has_assessment: bool = False
 
 
 @dataclass(frozen=True)
