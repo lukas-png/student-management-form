@@ -17,9 +17,12 @@ from sqlmodel import Session
 from planer.adapters.db import (
     PresentationStatus,
     get_all_groups,
+    get_member_attendance_for_slot,
     get_presentations_for_slot,
     get_students_in_groups,
+    rollup_status,
     update_presentation_status,
+    upsert_member_attendance,
 )
 from planer.adapters.db import Slot as DbSlot
 from planer.config import Settings, get_settings
@@ -62,16 +65,25 @@ async def tutor_form(
     slot = session.get(DbSlot, slot_id)
     presentations = get_presentations_for_slot(session, round_id, slot_id)
     group_names = {g.id: g.name for g in get_all_groups(session)}
-    members_by_group: dict[str, list[str]] = {}
+    students_by_group: dict[str, list] = {}
     for student in get_students_in_groups(session, [p.group_id for p in presentations]):
-        members_by_group.setdefault(student.group_id, []).append(student.name)
+        students_by_group.setdefault(student.group_id, []).append(student)
+    marked = {
+        a.student_id: a.status for a in get_member_attendance_for_slot(session, round_id, slot_id)
+    }
 
     rows = [
         {
             "group_id": p.group_id,
             "group_name": group_names.get(p.group_id, p.group_id),
-            "members": members_by_group.get(p.group_id, []),
-            "status": p.status,
+            "members": [
+                {
+                    "student_id": s.id,
+                    "name": s.name,
+                    "status": marked.get(s.id, PresentationStatus.SCHEDULED),
+                }
+                for s in students_by_group.get(p.group_id, [])
+            ],
         }
         for p in presentations
     ]
@@ -98,21 +110,35 @@ async def tutor_submit(
 
     form = await request.form()
     presentations = get_presentations_for_slot(session, round_id, slot_id)
+    students_by_group: dict[str, list] = {}
+    for student in get_students_in_groups(session, [p.group_id for p in presentations]):
+        students_by_group.setdefault(student.group_id, []).append(student)
+
     marked = 0
     for p in presentations:
-        raw = form.get(f"status_{p.group_id}")
-        if raw in (PresentationStatus.PRESENTED, PresentationStatus.NO_SHOW):
-            update_presentation_status(session, p.group_id, slot_id, PresentationStatus(raw))
-            logger.info(
-                "attendance marked",
-                extra={
-                    "group_id": p.group_id,
-                    "slot_id": slot_id,
-                    "round_id": round_id,
-                    "status": str(raw),
-                },
-            )
-            marked += 1
+        member_statuses: list[PresentationStatus] = []
+        for student in students_by_group.get(p.group_id, []):
+            raw = form.get(f"status_{student.id}")
+            if raw in (PresentationStatus.PRESENTED, PresentationStatus.NO_SHOW):
+                status = PresentationStatus(raw)
+                upsert_member_attendance(session, student.id, slot_id, p.group_id, round_id, status)
+                logger.info(
+                    "attendance marked",
+                    extra={
+                        "student_id": student.id,
+                        "group_id": p.group_id,
+                        "slot_id": slot_id,
+                        "round_id": round_id,
+                        "status": str(raw),
+                    },
+                )
+                marked += 1
+            else:
+                status = PresentationStatus.SCHEDULED
+            member_statuses.append(status)
+        rolled = rollup_status(member_statuses)
+        if rolled != PresentationStatus.SCHEDULED:
+            update_presentation_status(session, p.group_id, slot_id, rolled)
     logger.info(
         "tutor submission", extra={"slot_id": slot_id, "round_id": round_id, "marked": marked}
     )

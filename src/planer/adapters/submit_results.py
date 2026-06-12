@@ -51,7 +51,11 @@ def submit_presentations(
 ) -> SubmitReport:
     """Write per-user assessments for everyone who PRESENTED in ``round_id``."""
     # Local imports keep adapters/ from depending on each other at module load.
-    from planer.adapters.db import get_all_students, get_presentations_for_round
+    from planer.adapters.db import (
+        get_all_students,
+        get_member_attendance_for_round,
+        get_presentations_for_round,
+    )
 
     course_id = settings.stumgmt_course_id
     auth = StuMgmtAuth(settings.sparky_auth_url, settings.sparky_user, settings.sparky_password)
@@ -73,11 +77,19 @@ def submit_presentations(
     for s in get_all_students(session):
         members_by_group.setdefault(s.group_id or s.id, []).append(s.id)
 
-    presentations = [
-        (p.group_id, str(p.status)) for p in get_presentations_for_round(session, round_id)
-    ]
+    attendance_rows = get_member_attendance_for_round(session, round_id)
+    attendance = {a.student_id: str(a.status) for a in attendance_rows}
+    groups_with_attendance = {a.group_id for a in attendance_rows}
+    member_statuses: list[tuple[str, str]] = []
+    for p in get_presentations_for_round(session, round_id):
+        for uid in members_by_group.get(p.group_id, []):
+            if p.group_id in groups_with_attendance:
+                member_statuses.append((uid, attendance.get(uid, "SCHEDULED")))
+            else:
+                member_statuses.append((uid, str(p.status)))
+
     comment = f"Vorgestellt (Tutorium-Planer, Runde {round_id}, {date.today().isoformat()})"
-    payloads = build_assessments(presentations, members_by_group, points, comment)
+    payloads = build_assessments(member_statuses, points, comment)
 
     # Read-only; safe in dry-run too and makes the preview's skipped/created accurate.
     existing = existing_assessments_by_user(client, course_id, assignment_id)

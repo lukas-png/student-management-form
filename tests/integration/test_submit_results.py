@@ -22,6 +22,7 @@ from planer.adapters.db import (
     make_engine,
     update_presentation_status,
     upsert_groups,
+    upsert_member_attendance,
     upsert_students,
 )
 from planer.adapters.submit_results import submit_presentations
@@ -138,6 +139,31 @@ def test_no_show_member_is_not_written(session: Session, round_with_presentation
     sent = json.loads(bulk.calls.last.request.content)
     assert "u3" not in {d["userId"] for d in sent}
     assert "u3" not in report.created
+
+
+@respx.mock
+def test_per_member_attendance_overrides_group(session: Session) -> None:
+    """A member marked absent in a presented group is excluded from write-back."""
+    participants = [
+        _participant("u1", "g1", "Gruppe 1"),
+        _participant("u2", "g1", "Gruppe 1"),
+    ]
+    upsert_students(session, participants)
+    upsert_groups(session, build_groups(participants))
+    rnd = create_round(session)
+    assert rnd.id is not None
+    slot = create_slot(session, rnd.id, datetime(2024, 3, 18, 10, 0))
+    assert slot.id is not None
+    create_presentation(session, "g1", slot.id, rnd.id)
+    update_presentation_status(session, "g1", slot.id, PresentationStatus.PRESENTED)
+    upsert_member_attendance(session, "u1", slot.id, "g1", rnd.id, PresentationStatus.PRESENTED)
+    upsert_member_attendance(session, "u2", slot.id, "g1", rnd.id, PresentationStatus.NO_SHOW)
+
+    bulk = _mock()
+    report = submit_presentations(session, _settings(), rnd.id)
+
+    assert report.created == ["u1"]
+    assert {d["userId"] for d in json.loads(bulk.calls.last.request.content)} == {"u1"}
 
 
 @respx.mock

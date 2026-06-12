@@ -16,6 +16,7 @@ from planer.adapters.db import (
     make_engine,
     update_presentation_status,
     upsert_groups,
+    upsert_member_attendance,
     upsert_students,
 )
 from planer.domain.models import Group as DomainGroup
@@ -77,6 +78,21 @@ class TestBuildExportRows:
         rows = build_export_rows(session, rnd.id)
         assert rows[0]["status"] == "PRESENTED"
         assert rows[0]["marked_at"] != ""
+
+    def test_per_member_status(self, session: Session) -> None:
+        upsert_students(session, [_participant("u1"), _participant("u2")])
+        upsert_groups(session, [DomainGroup(id="g1", name="Gruppe Eins", members=())])
+        rnd = create_round(session)
+        assert rnd.id is not None
+        slot = create_slot(session, rnd.id, _T0)
+        assert slot.id is not None
+        create_presentation(session, "g1", slot.id, rnd.id)
+        update_presentation_status(session, "g1", slot.id, PresentationStatus.PRESENTED)
+        upsert_member_attendance(session, "u1", slot.id, "g1", rnd.id, PresentationStatus.PRESENTED)
+        upsert_member_attendance(session, "u2", slot.id, "g1", rnd.id, PresentationStatus.NO_SHOW)
+
+        rows = {r["member_name"]: r["status"] for r in build_export_rows(session, rnd.id)}
+        assert rows == {"Student u1": "PRESENTED", "Student u2": "NO_SHOW"}
 
     def test_empty_round_yields_no_rows(self, session: Session) -> None:
         rnd = create_round(session)

@@ -265,6 +265,9 @@ details > summary {
 .members-table tr:hover { background: transparent; }
 .choices-inline { display: flex; flex-wrap: wrap; gap: 1.2rem; margin-top: .6rem; }
 .choices-inline label { cursor: pointer; }
+.member-row { padding: .5rem 0; border-top: 1px solid var(--border); margin-top: .5rem; }
+.member-row:first-of-type { border-top: none; }
+.member-row .choices-inline { margin-top: .3rem; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .5rem 0; }
 

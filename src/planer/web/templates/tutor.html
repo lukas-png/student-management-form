@@ -14,17 +14,21 @@
     {% for row in rows %}
     <div class="group">
       <div><strong>{{ row.group_name }}</strong></div>
-      {% if row.members %}<div class="members">{{ row.members | join(', ') }}</div>{% endif %}
-      <div class="choices-inline">
-        <label>
-          <input type="radio" name="status_{{ row.group_id }}" value="PRESENTED"
-                 {% if row.status == 'PRESENTED' %}checked{% endif %}> vorgestellt
-        </label>
-        <label>
-          <input type="radio" name="status_{{ row.group_id }}" value="NO_SHOW"
-                 {% if row.status == 'NO_SHOW' %}checked{% endif %}> nicht erschienen
-        </label>
+      {% for member in row.members %}
+      <div class="member-row">
+        <div class="members">{{ member.name }}</div>
+        <div class="choices-inline">
+          <label>
+            <input type="radio" name="status_{{ member.student_id }}" value="PRESENTED"
+                   {% if member.status == 'PRESENTED' %}checked{% endif %}> vorgestellt
+          </label>
+          <label>
+            <input type="radio" name="status_{{ member.student_id }}" value="NO_SHOW"
+                   {% if member.status == 'NO_SHOW' %}checked{% endif %}> nicht erschienen
+          </label>
+        </div>
       </div>
+      {% endfor %}
     </div>
     {% endfor %}
     <div class="actions"><button type="submit" class="btn-primary">Speichern</button></div>

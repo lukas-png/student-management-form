@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from enum import StrEnum
 
@@ -83,6 +84,25 @@ class Availability(SQLModel, table=True):
 class Presentation(SQLModel, table=True):
     group_id: str = Field(foreign_key="groups.id", primary_key=True)
     slot_id: int = Field(foreign_key="slot.id", primary_key=True)
+    round_id: int = Field(foreign_key="planning_round.id")
+    # Group-level rollup of the members' attendance (see MemberAttendance).
+    status: PresentationStatus = PresentationStatus.SCHEDULED
+    marked_at: datetime | None = None
+
+
+class MemberAttendance(SQLModel, table=True):
+    """Per-member attendance for a scheduled presentation
+
+    The group-level ``Presentation.status`` is a rollup of these rows; grading and
+    export read these directly so an absent member of a group that presented is
+    excluded.
+    """
+
+    __tablename__ = "member_attendance"
+
+    student_id: str = Field(foreign_key="student.id", primary_key=True)
+    slot_id: int = Field(foreign_key="slot.id", primary_key=True)
+    group_id: str = Field(foreign_key="groups.id")
     round_id: int = Field(foreign_key="planning_round.id")
     status: PresentationStatus = PresentationStatus.SCHEDULED
     marked_at: datetime | None = None
@@ -389,6 +409,59 @@ def get_presentations_before_round(session: Session, round_id: int) -> list[Pres
     """All presentations from rounds strictly earlier than ``round_id`` (for carry-over)."""
     return list(
         session.exec(select(Presentation).where(Presentation.round_id < round_id)).all()  # type: ignore[arg-type]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Repository: Member attendance
+# ---------------------------------------------------------------------------
+
+
+def rollup_status(member_statuses: Iterable[PresentationStatus]) -> PresentationStatus:
+    """Group-level status from its members': PRESENTED if any presented, NO_SHOW if
+    every member was marked NO_SHOW, else SCHEDULED (still pending / unmarked)."""
+    statuses = list(member_statuses)
+    if any(s == PresentationStatus.PRESENTED for s in statuses):
+        return PresentationStatus.PRESENTED
+    if statuses and all(s == PresentationStatus.NO_SHOW for s in statuses):
+        return PresentationStatus.NO_SHOW
+    return PresentationStatus.SCHEDULED
+
+
+def upsert_member_attendance(
+    session: Session,
+    student_id: str,
+    slot_id: int,
+    group_id: str,
+    round_id: int,
+    status: PresentationStatus,
+) -> None:
+    session.merge(
+        MemberAttendance(
+            student_id=student_id,
+            slot_id=slot_id,
+            group_id=group_id,
+            round_id=round_id,
+            status=status,
+            marked_at=_now(),
+        )
+    )
+    session.commit()
+
+
+def get_member_attendance_for_slot(
+    session: Session, round_id: int, slot_id: int
+) -> list[MemberAttendance]:
+    stmt = select(MemberAttendance).where(
+        MemberAttendance.round_id == round_id,
+        MemberAttendance.slot_id == slot_id,
+    )
+    return list(session.exec(stmt).all())
+
+
+def get_member_attendance_for_round(session: Session, round_id: int) -> list[MemberAttendance]:
+    return list(
+        session.exec(select(MemberAttendance).where(MemberAttendance.round_id == round_id)).all()
     )
 
 

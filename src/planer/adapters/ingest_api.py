@@ -186,7 +186,7 @@ def passed_assessment_user_ids(
     result: set[str] = set()
     if isinstance(existing, list):
         for entry in existing:
-            if entry.get("isDraft"):  
+            if entry.get("isDraft"):
                 continue
             try:
                 points = float(entry.get("achievedPoints") or 0)  # may arrive as a string

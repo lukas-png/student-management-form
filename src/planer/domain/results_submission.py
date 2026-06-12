@@ -7,7 +7,7 @@ Only PRESENTED counts; NO_SHOW / SCHEDULED are ignored.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 PRESENTED = "PRESENTED"
@@ -22,24 +22,22 @@ class AssessmentPayload:
 
 
 def build_assessments(
-    presentations: Iterable[tuple[str, str]],
-    members_by_group: Mapping[str, Sequence[str]],
+    member_statuses: Iterable[tuple[str, str]],
     points: int,
     comment: str,
     *,
     is_draft: bool = True,
 ) -> tuple[AssessmentPayload, ...]:
-    """One AssessmentPayload per member of every PRESENTED group.
+    """One AssessmentPayload per user marked PRESENTED.
 
-    ``presentations`` is an iterable of ``(group_id, status)``; only ``PRESENTED``
-    rows produce output. ``members_by_group`` maps a group id to its members'
-    user ids.
+    ``member_statuses`` is an iterable of ``(user_id, status)``; only ``PRESENTED``
+    rows produce output. A member of a group that presented but who was marked
+    absent is excluded.
     """
     user_ids: set[str] = set()
-    for group_id, status in presentations:
-        if status != PRESENTED:
-            continue
-        user_ids.update(members_by_group.get(group_id, ()))
+    for user_id, status in member_statuses:
+        if status == PRESENTED:
+            user_ids.add(user_id)
     return tuple(
         AssessmentPayload(
             user_id=uid,

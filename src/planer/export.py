@@ -13,6 +13,7 @@ from sqlmodel import Session
 
 from planer.adapters.db import (
     get_all_groups,
+    get_member_attendance_for_round,
     get_presentations_for_round,
     get_slots_for_round,
     get_students_in_groups,
@@ -39,6 +40,7 @@ def build_export_rows(session: Session, round_id: int) -> list[dict[str, str]]:
     members_by_group: dict[str, list] = {}
     for student in get_students_in_groups(session, [p.group_id for p in presentations]):
         members_by_group.setdefault(student.group_id, []).append(student)
+    attendance = {a.student_id: a for a in get_member_attendance_for_round(session, round_id)}
 
     rows: list[dict[str, str]] = []
     for pres in sorted(presentations, key=lambda p: p.group_id):
@@ -48,8 +50,13 @@ def build_export_rows(session: Session, round_id: int) -> list[dict[str, str]]:
         members = sorted(members_by_group.get(pres.group_id, []), key=lambda s: s.id)
         if not members:
             members = [None]  # still emit a row for a member-less group
-        marked = pres.marked_at.strftime("%Y-%m-%d %H:%M") if pres.marked_at else ""
+        group_marked = pres.marked_at.strftime("%Y-%m-%d %H:%M") if pres.marked_at else ""
         for member in members:
+            att = attendance.get(member.id) if member else None
+            status = str(att.status) if att else str(pres.status)
+            marked = (
+                att.marked_at.strftime("%Y-%m-%d %H:%M") if att and att.marked_at else group_marked
+            )
             rows.append(
                 {
                     "round_id": str(round_id),
@@ -59,7 +66,7 @@ def build_export_rows(session: Session, round_id: int) -> list[dict[str, str]]:
                     "matriculation": member.matr_nr if member else "",
                     "slot_starts_at": slot_time,
                     "room": room,
-                    "status": str(pres.status),
+                    "status": status,
                     "marked_at": marked,
                 }
             )

@@ -28,6 +28,8 @@ from planer.adapters.db import (
     get_all_groups,
     get_availabilities_for_round,
     get_curations_for_round,
+    get_member_attendance_for_round,
+    get_member_attendance_for_slot,
     get_presentations_for_round,
     get_round,
     get_slots_for_round,
@@ -35,11 +37,13 @@ from planer.adapters.db import (
     list_rounds,
     log_email,
     make_engine,
+    rollup_status,
     set_round_quorum,
     update_presentation_status,
     upsert_availability,
     upsert_curation,
     upsert_groups,
+    upsert_member_attendance,
     upsert_students,
 )
 from planer.domain.filtering import build_groups
@@ -506,6 +510,76 @@ class TestPresentations:
         assert slot.id is not None
         create_presentation(session, "g1", slot.id, r1.id)
         assert get_presentations_for_round(session, r2.id) == []
+
+
+class TestRollupStatus:
+    def test_any_presented_wins(self) -> None:
+        assert (
+            rollup_status([PresentationStatus.PRESENTED, PresentationStatus.NO_SHOW])
+            == PresentationStatus.PRESENTED
+        )
+
+    def test_all_no_show(self) -> None:
+        assert (
+            rollup_status([PresentationStatus.NO_SHOW, PresentationStatus.NO_SHOW])
+            == PresentationStatus.NO_SHOW
+        )
+
+    def test_any_scheduled_stays_scheduled(self) -> None:
+        assert (
+            rollup_status([PresentationStatus.NO_SHOW, PresentationStatus.SCHEDULED])
+            == PresentationStatus.SCHEDULED
+        )
+
+    def test_empty_is_scheduled(self) -> None:
+        assert rollup_status([]) == PresentationStatus.SCHEDULED
+
+
+class TestMemberAttendance:
+    def test_upsert_and_get_for_slot(self, session: Session) -> None:
+        upsert_groups(session, [_domain_group()])
+        upsert_students(session, [_participant("u1"), _participant("u2")])
+        rnd = create_round(session)
+        assert rnd.id is not None
+        slot = create_slot(session, rnd.id, _T0)
+        assert slot.id is not None
+        create_presentation(session, "g1", slot.id, rnd.id)
+        upsert_member_attendance(session, "u1", slot.id, "g1", rnd.id, PresentationStatus.PRESENTED)
+        upsert_member_attendance(session, "u2", slot.id, "g1", rnd.id, PresentationStatus.NO_SHOW)
+
+        rows = {
+            a.student_id: a.status for a in get_member_attendance_for_slot(session, rnd.id, slot.id)
+        }
+        assert rows == {
+            "u1": PresentationStatus.PRESENTED,
+            "u2": PresentationStatus.NO_SHOW,
+        }
+
+    def test_upsert_overwrites(self, session: Session) -> None:
+        upsert_groups(session, [_domain_group()])
+        upsert_students(session, [_participant("u1")])
+        rnd = create_round(session)
+        assert rnd.id is not None
+        slot = create_slot(session, rnd.id, _T0)
+        assert slot.id is not None
+        upsert_member_attendance(session, "u1", slot.id, "g1", rnd.id, PresentationStatus.NO_SHOW)
+        upsert_member_attendance(session, "u1", slot.id, "g1", rnd.id, PresentationStatus.PRESENTED)
+
+        rows = get_member_attendance_for_round(session, rnd.id)
+        assert len(rows) == 1
+        assert rows[0].status == PresentationStatus.PRESENTED
+        assert rows[0].marked_at is not None
+
+    def test_other_round_not_returned(self, session: Session) -> None:
+        upsert_groups(session, [_domain_group()])
+        upsert_students(session, [_participant("u1")])
+        r1 = create_round(session)
+        r2 = create_round(session)
+        assert r1.id is not None and r2.id is not None
+        slot = create_slot(session, r1.id, _T0)
+        assert slot.id is not None
+        upsert_member_attendance(session, "u1", slot.id, "g1", r1.id, PresentationStatus.PRESENTED)
+        assert get_member_attendance_for_round(session, r2.id) == []
 
 
 # ---------------------------------------------------------------------------

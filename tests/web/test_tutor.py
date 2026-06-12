@@ -15,6 +15,7 @@ from planer.adapters.db import (
     create_round,
     create_slot,
     create_tables,
+    get_member_attendance_for_round,
     get_presentations_for_round,
     make_engine,
     upsert_groups,
@@ -122,33 +123,62 @@ class TestTutorSubmit:
         round_id, slot_id = _seed(test_engine)
         token = sign_tutor_token(slot_id, round_id, secret_key=_SECRET)
 
-        resp = client.post(f"/tutor/{token}", data={"status_g1": "PRESENTED"})
+        resp = client.post(
+            f"/tutor/{token}", data={"status_u1": "PRESENTED", "status_u2": "PRESENTED"}
+        )
         assert resp.status_code == 200
 
         with Session(test_engine) as sess:
             presos = get_presentations_for_round(sess, round_id)
+            attendance = {
+                a.student_id: a.status for a in get_member_attendance_for_round(sess, round_id)
+            }
+        # Group rollup is PRESENTED when any member presented.
         assert presos[0].status == PresentationStatus.PRESENTED
         assert presos[0].marked_at is not None
+        assert attendance == {
+            "u1": PresentationStatus.PRESENTED,
+            "u2": PresentationStatus.PRESENTED,
+        }
 
     def test_mark_no_show(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
         round_id, slot_id = _seed(test_engine)
         token = sign_tutor_token(slot_id, round_id, secret_key=_SECRET)
 
-        client.post(f"/tutor/{token}", data={"status_g1": "NO_SHOW"})
+        client.post(f"/tutor/{token}", data={"status_u1": "NO_SHOW", "status_u2": "NO_SHOW"})
 
         with Session(test_engine) as sess:
             presos = get_presentations_for_round(sess, round_id)
+        # Rollup is NO_SHOW only when every member was absent.
         assert presos[0].status == PresentationStatus.NO_SHOW
+
+    def test_mixed_member_attendance(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
+        round_id, slot_id = _seed(test_engine)
+        token = sign_tutor_token(slot_id, round_id, secret_key=_SECRET)
+
+        client.post(f"/tutor/{token}", data={"status_u1": "PRESENTED", "status_u2": "NO_SHOW"})
+
+        with Session(test_engine) as sess:
+            presos = get_presentations_for_round(sess, round_id)
+            attendance = {
+                a.student_id: a.status for a in get_member_attendance_for_round(sess, round_id)
+            }
+        # One present member → group rollup PRESENTED, but per-member status differs.
+        assert presos[0].status == PresentationStatus.PRESENTED
+        assert attendance["u1"] == PresentationStatus.PRESENTED
+        assert attendance["u2"] == PresentationStatus.NO_SHOW
 
     def test_invalid_status_ignored(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
         round_id, slot_id = _seed(test_engine)
         token = sign_tutor_token(slot_id, round_id, secret_key=_SECRET)
 
-        client.post(f"/tutor/{token}", data={"status_g1": "GARBAGE"})
+        client.post(f"/tutor/{token}", data={"status_u1": "GARBAGE", "status_u2": "GARBAGE"})
 
         with Session(test_engine) as sess:
             presos = get_presentations_for_round(sess, round_id)
+            attendance = get_member_attendance_for_round(sess, round_id)
         assert presos[0].status == PresentationStatus.SCHEDULED
+        assert attendance == []
 
     def test_post_bad_token_400(self, client: TestClient) -> None:
         assert client.post("/tutor/bad.token", data={}).status_code == 400
