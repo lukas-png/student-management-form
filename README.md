@@ -57,6 +57,7 @@ Wichtige Variablen:
 | `SMTP_*`, `MAIL_FROM`, `MAIL_REPLY_TO` | Mailversand über STARTTLS. |
 | `STUMGMT_*`, `SPARKY_*` | stu-mgmt-API + Sparkyservice-Auth. |
 | `STUMGMT_PRESENTATION_ASSIGNMENT_ID` / `_NAME` | Ziel-Hausaufgabe für `planer sync`: per ID setzen, oder leer lassen und den exakten Namen angeben. |
+| `PRESENTATION_PASS_POINTS` | Beim Import gilt ein Studierender nur als „bereits geprüft" (und fällt aus der Fälligkeit), wenn sein Vorstellungs-Assessment **freigegeben** (kein Entwurf) ist **und** mindestens so viele Punkte hat. Entwürfe / weniger Punkte → bleibt fällig. Default 1. |
 
 ## Entwicklung
 

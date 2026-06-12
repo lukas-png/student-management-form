@@ -74,6 +74,7 @@ def _cmd_import(args: argparse.Namespace) -> None:
             settings.sparky_password,
             presentation_assignment_id=settings.stumgmt_presentation_assignment_id,
             presentation_assignment_name=settings.stumgmt_presentation_assignment_name,
+            presentation_pass_points=settings.presentation_pass_points,
         )
     groups = build_groups(participants)
     engine = make_engine(settings.database_url)

@@ -290,7 +290,9 @@ def test_fetch_participants_enriches_has_assessment(
         return_value=httpx.Response(200, json=[{"id": "a1", "name": "Vorstellung", "points": 10}])
     )
     respx.get(f"{_API_URL}/courses/{_COURSE_ID}/assignments/a1/assessments").mock(
-        return_value=httpx.Response(200, json=[{"id": "as1", "userId": "u1"}])
+        return_value=httpx.Response(
+            200, json=[{"id": "as1", "userId": "u1", "isDraft": False, "achievedPoints": 10}]
+        )
     )
     participants = fetch_participants(
         _API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass", presentation_assignment_id="a1"
@@ -298,6 +300,74 @@ def test_fetch_participants_enriches_has_assessment(
     by_id = {p.user_id: p for p in participants}
     assert by_id["u1"].has_assessment is True
     assert by_id["u2"].has_assessment is False
+
+
+def _mock_enrichment(assessments: list[dict]) -> None:
+    """Wire up the assignments + assessments reads for an enrichment test."""
+    respx.get(f"{_API_URL}/courses/{_COURSE_ID}/assignments").mock(
+        return_value=httpx.Response(200, json=[{"id": "a1", "name": "Vorstellung", "points": 10}])
+    )
+    respx.get(f"{_API_URL}/courses/{_COURSE_ID}/assignments/a1/assessments").mock(
+        return_value=httpx.Response(200, json=assessments)
+    )
+
+
+@respx.mock
+def test_draft_assessment_does_not_flag(
+    sample_admission_status: list[dict], sample_groups: list[dict]
+) -> None:
+    _mock_api(sample_admission_status, sample_groups)
+    _mock_enrichment([{"id": "as1", "userId": "u1", "isDraft": True, "achievedPoints": 10}])
+    participants = fetch_participants(
+        _API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass", presentation_assignment_id="a1"
+    )
+    # draft → not yet released → student stays due
+    assert all(p.has_assessment is False for p in participants)
+
+
+@respx.mock
+def test_zero_point_assessment_does_not_flag(
+    sample_admission_status: list[dict], sample_groups: list[dict]
+) -> None:
+    _mock_api(sample_admission_status, sample_groups)
+    _mock_enrichment([{"id": "as1", "userId": "u1", "isDraft": False, "achievedPoints": 0}])
+    participants = fetch_participants(
+        _API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass", presentation_assignment_id="a1"
+    )
+    # 0 points (< pass threshold) → not passed → student stays due
+    assert all(p.has_assessment is False for p in participants)
+
+
+@respx.mock
+def test_string_points_parsed(
+    sample_admission_status: list[dict], sample_groups: list[dict]
+) -> None:
+    _mock_api(sample_admission_status, sample_groups)
+    _mock_enrichment([{"id": "as1", "userId": "u1", "isDraft": False, "achievedPoints": "5"}])
+    participants = fetch_participants(
+        _API_URL, _COURSE_ID, _SPARKY_URL, "user", "pass", presentation_assignment_id="a1"
+    )
+    by_id = {p.user_id: p for p in participants}
+    assert by_id["u1"].has_assessment is True
+
+
+@respx.mock
+def test_pass_points_threshold_respected(
+    sample_admission_status: list[dict], sample_groups: list[dict]
+) -> None:
+    _mock_api(sample_admission_status, sample_groups)
+    _mock_enrichment([{"id": "as1", "userId": "u1", "isDraft": False, "achievedPoints": 3}])
+    participants = fetch_participants(
+        _API_URL,
+        _COURSE_ID,
+        _SPARKY_URL,
+        "user",
+        "pass",
+        presentation_assignment_id="a1",
+        presentation_pass_points=5,
+    )
+    # 3 points below the configured threshold of 5 → not passed
+    assert all(p.has_assessment is False for p in participants)
 
 
 @respx.mock

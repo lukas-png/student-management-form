@@ -60,6 +60,7 @@ def fetch_participants(
     sparky_password: str,
     presentation_assignment_id: str = "",
     presentation_assignment_name: str = "",
+    presentation_pass_points: int = 1,
 ) -> list[Participant]:
     """Fetch course participants from stu-mgmt and merge them into domain objects.
 
@@ -69,8 +70,9 @@ def fetch_participants(
       - GET /courses/{id}/groups           → group membership per user
 
     If a presentation assignment is configured, a third read marks everyone who
-    already has an assessment there (``has_assessment=True``) so the planner can
-    treat them as already examined. Skipped when no assignment is configured.
+    already has a **passed, released** assessment there (``has_assessment=True``)
+    so the planner can treat them as already examined. Draft assessments and
+    those below ``presentation_pass_points`` do not count. Skipped when no assignment is configured.
     """
     auth = StuMgmtAuth(auth_url, sparky_user, sparky_password)
     client = StuMgmtClient(api_url, auth)
@@ -85,7 +87,9 @@ def fetch_participants(
             want_id=presentation_assignment_id,
             want_name=presentation_assignment_name,
         )
-        assessed = set(existing_assessments_by_user(client, course_id, str(assignment["id"])))
+        assessed = passed_assessment_user_ids(
+            client, course_id, str(assignment["id"]), presentation_pass_points
+        )
         if assessed:
             participants = [
                 replace(p, has_assessment=True) if p.user_id in assessed else p
@@ -165,6 +169,34 @@ def existing_assessments_by_user(
             uid = _assessment_user_id(entry)
             if uid and entry.get("id"):
                 result[uid] = str(entry["id"])
+    return result
+
+
+def passed_assessment_user_ids(
+    client: StuMgmtClient, course_id: str, assignment_id: str, pass_points: int
+) -> set[str]:
+    """user_ids with a released (non-draft) assessment of at least ``pass_points``.
+
+    Used by the import enrichment to flag students as already examined. Unlike
+    ``existing_assessments_by_user`` (which the results-sync needs to find *every*
+    assessment, including drafts, for idempotency), this deliberately ignores
+    drafts and failing/zero-point assessments.
+    """
+    existing = client.get(f"/courses/{course_id}/assignments/{assignment_id}/assessments")
+    result: set[str] = set()
+    if isinstance(existing, list):
+        for entry in existing:
+            if entry.get("isDraft"):  
+                continue
+            try:
+                points = float(entry.get("achievedPoints") or 0)  # may arrive as a string
+            except (TypeError, ValueError):
+                points = 0.0
+            if points < pass_points:  # not passed
+                continue
+            uid = _assessment_user_id(entry)
+            if uid:
+                result.add(uid)
     return result
 
 

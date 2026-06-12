@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     stumgmt_course_id: str = ""
     stumgmt_presentation_assignment_id: str = ""
     stumgmt_presentation_assignment_name: str = ""
+    presentation_pass_points: int = 1
 
     @field_validator("secret_key")
     @classmethod
