@@ -21,6 +21,7 @@ from planer.adapters.db import (
     get_presentations_for_slot,
     get_students_in_groups,
     rollup_status,
+    student_is_due,
     update_presentation_status,
     upsert_member_attendance,
 )
@@ -65,8 +66,11 @@ async def tutor_form(
     slot = session.get(DbSlot, slot_id)
     presentations = get_presentations_for_slot(session, round_id, slot_id)
     group_names = {g.id: g.name for g in get_all_groups(session)}
+    threshold = settings.individual_threshold
     students_by_group: dict[str, list] = {}
     for student in get_students_in_groups(session, [p.group_id for p in presentations]):
+        if not student_is_due(student, threshold):
+            continue  # Altzulassung/assessment → not summoned, nothing to mark
         students_by_group.setdefault(student.group_id, []).append(student)
     marked = {
         a.student_id: a.status for a in get_member_attendance_for_slot(session, round_id, slot_id)
@@ -109,9 +113,12 @@ async def tutor_submit(
     slot_id, round_id = parsed
 
     form = await request.form()
+    threshold = settings.individual_threshold
     presentations = get_presentations_for_slot(session, round_id, slot_id)
     students_by_group: dict[str, list] = {}
     for student in get_students_in_groups(session, [p.group_id for p in presentations]):
+        if not student_is_due(student, threshold):
+            continue  # Altzulassung/assessment → not summoned, nothing to mark
         students_by_group.setdefault(student.group_id, []).append(student)
 
     marked = 0

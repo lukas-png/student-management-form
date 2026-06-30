@@ -62,3 +62,17 @@ def build_groups(participants: list[Participant]) -> list[Group]:
 def select_due_groups(groups: list[Group], threshold: int) -> list[Group]:
     """Return groups where at least one member is due."""
     return [g for g in groups if any(is_due(m, threshold) for m in g.members)]
+
+
+def due_members(group: Group, threshold: int) -> Group:
+    """Group restricted to members still due
+
+    Members with an Altzulassung or an existing assessment are not due; they are
+    not mailed and must not count for the availability quorum. A due group always
+    has at least one due member, so the result is never empty for a scheduled group.
+    """
+    return Group(
+        id=group.id,
+        name=group.name,
+        members=tuple(m for m in group.members if is_due(m, threshold)),
+    )

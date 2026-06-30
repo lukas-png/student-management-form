@@ -23,7 +23,7 @@ from planer.adapters.db import (
     get_students_in_groups,
 )
 from planer.domain.availability import group_feasible_slots, member_declined
-from planer.domain.filtering import is_due
+from planer.domain.filtering import due_members, is_due
 from planer.domain.models import Slot as DomainSlot
 from planer.domain.scheduling import ScheduleResult, assign
 from planer.domain.tracking import compute_carry_over
@@ -78,21 +78,23 @@ def solve_round(session: Session, round_id: int, threshold: int) -> ScheduleResu
         and not any(is_due(m, threshold) for m in dg.members)
     )
 
+    due_by_id = {dg.id: due_members(dg, threshold) for dg in domain_groups}
     feasible: dict[str, set[str]] = {
-        dg.id: group_feasible_slots(dg, avail_dict, domain_slots, require_all=require_all)
+        dg.id: group_feasible_slots(
+            due_by_id[dg.id], avail_dict, domain_slots, require_all=require_all
+        )
         for dg in included_groups
     }
 
-    # Pinned groups are placed on their fixed slot. But if a member declined that
-    # slot, hold the group back (it surfaces as a conflict in the dashboard) —
+    # Pinned groups are placed on their fixed slot. But if a (due) member declined
+    # that slot, hold the group back (it surfaces as a conflict in the dashboard) —
     # unless the admin set the override to schedule it anyway.
-    groups_by_id = {dg.id: dg for dg in domain_groups}
     pinned: dict[str, str] = {}
     for gid, c in curations.items():
         if c.pinned_slot_id is None or not c.included:
             continue
         pin_slot = str(c.pinned_slot_id)
-        group = groups_by_id.get(gid)
+        group = due_by_id.get(gid)
         declined = group is not None and member_declined(
             group, pin_slot, avail_dict, require_all=require_all
         )

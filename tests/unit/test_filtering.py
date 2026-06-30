@@ -1,4 +1,4 @@
-from planer.domain.filtering import build_groups, is_due, select_due_groups
+from planer.domain.filtering import build_groups, due_members, is_due, select_due_groups
 from planer.domain.models import Participant, Result
 
 _RULE = "INDIVIDUAL_PERCENT_WITH_ALLOWED_FAILURES"
@@ -165,3 +165,31 @@ class TestSelectDueGroups:
         due = select_due_groups(groups, THRESHOLD)
         assert len(due) == 1
         assert due[0].id == "g1"
+
+
+class TestDueMembers:
+    def test_drops_assessed_and_altzulassung_members(self) -> None:
+        p_due = _participant(user_id="u1", group_id="g1", results=(_result(achieved_points=1),))
+        p_assessed = _participant(
+            user_id="u2",
+            group_id="g1",
+            has_assessment=True,
+            results=(_result(achieved_points=0),),
+        )
+        p_alt = _participant(
+            user_id="u3",
+            group_id="g1",
+            has_admission_from_previous_semester=True,
+            results=(_result(achieved_points=0),),
+        )
+        [group] = build_groups([p_due, p_assessed, p_alt])
+        summoned = due_members(group, THRESHOLD)
+        assert {m.user_id for m in summoned.members} == {"u1"}
+        assert summoned.id == "g1" and summoned.name == group.name
+
+    def test_keeps_all_when_all_due(self) -> None:
+        p1 = _participant(user_id="u1", group_id="g1", results=(_result(achieved_points=0),))
+        p2 = _participant(user_id="u2", group_id="g1", results=(_result(achieved_points=2),))
+        [group] = build_groups([p1, p2])
+        summoned = due_members(group, THRESHOLD)
+        assert {m.user_id for m in summoned.members} == {"u1", "u2"}

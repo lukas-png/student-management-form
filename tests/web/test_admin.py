@@ -322,6 +322,41 @@ class TestSolver:
         with Session(test_engine) as sess:
             assert len(get_presentations_for_round(sess, round_id)) == 0
 
+    def test_mixed_group_schedulable_under_all_quorum(
+        self, client: TestClient, test_engine
+    ) -> None:  # type: ignore[no-untyped-def]
+        # g1 has a due member (u1) and an already-assessed member (u2). Under the
+        # default "all" quorum the assessed member would normally block the slot,
+        # but not-due members are not summoned and so do not count for the quorum →
+        # the group is placed on the slot u1 can make.
+        from dataclasses import replace
+
+        from planer.adapters.db import upsert_availability
+
+        with Session(test_engine) as sess:
+            upsert_students(
+                sess,
+                [
+                    _participant("u1", "g1"),
+                    replace(_participant("u2", "g1"), has_assessment=True),
+                ],
+            )
+            upsert_groups(sess, [DomainGroup(id="g1", name="G1", members=())])
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            slot = create_slot(sess, rnd.id, _T0)
+            assert slot.id is not None
+            upsert_availability(sess, "u1", slot.id, available=True)
+            # u2 (assessed) submits nothing —> must not hold the group back.
+            round_id, slot_id = rnd.id, slot.id
+
+        client.post(f"/admin/rounds/{round_id}/solve", follow_redirects=True)
+        with Session(test_engine) as sess:
+            presos = get_presentations_for_round(sess, round_id)
+        assert len(presos) == 1
+        assert presos[0].group_id == "g1"
+        assert presos[0].slot_id == slot_id
+
     def test_solve_excludes_unavailable_group(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
         with Session(test_engine) as sess:
             upsert_students(sess, [_participant("u1", "g1")])

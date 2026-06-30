@@ -54,7 +54,8 @@ def _load_settings():  # type: ignore[no-untyped-def]
 def _print_report(report: SendReport) -> None:
     print(
         f"sent={len(report.sent)} skipped={len(report.skipped)} "
-        f"excluded={len(report.excluded)} failed={len(report.failed)}"
+        f"excluded={len(report.excluded)} not_due={len(report.not_due)} "
+        f"failed={len(report.failed)}"
     )
     for student_id, error in report.failed:
         print(f"  FAILED {student_id}: {error}")
@@ -111,10 +112,17 @@ def _cmd_send(args: argparse.Namespace) -> None:
                 args.round_id,
                 base_url=settings.public_base_url,
                 secret_key=settings.secret_key,
+                threshold=settings.individual_threshold,
                 force=args.force,
             )
         else:  # assignment
-            report = send_slot_assignments(session, sender, args.round_id, force=args.force)
+            report = send_slot_assignments(
+                session,
+                sender,
+                args.round_id,
+                threshold=settings.individual_threshold,
+                force=args.force,
+            )
     _print_report(report)
 
 
@@ -129,6 +137,7 @@ def _cmd_remind(args: argparse.Namespace) -> None:
             args.round_id,
             base_url=settings.public_base_url,
             secret_key=settings.secret_key,
+            threshold=settings.individual_threshold,
             force=args.force,
         )
     _print_report(report)

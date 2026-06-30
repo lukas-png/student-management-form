@@ -47,7 +47,13 @@ class FakeMailSender:
         self.sent.append((to, subject, body))
 
 
-def _participant(uid: str, group_id: str = "g1", email: str | None = None) -> Participant:
+def _participant(
+    uid: str,
+    group_id: str = "g1",
+    email: str | None = None,
+    *,
+    has_assessment: bool = False,
+) -> Participant:
     return Participant(
         user_id=uid,
         display_name=f"Student {uid}",
@@ -56,6 +62,7 @@ def _participant(uid: str, group_id: str = "g1", email: str | None = None) -> Pa
         group_id=group_id,
         group_name="G1",
         has_admission=True,
+        has_assessment=has_assessment,
         results=(),
     )
 
@@ -135,13 +142,34 @@ class TestAvailabilityRequests:
         sender = FakeMailSender()
 
         report = send_availability_requests(
-            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
         )
 
         assert len(sender.sent) == 2
         assert sorted(report.sent) == ["u1", "u2"]
         assert report.skipped == []
         assert report.failed == []
+
+    def test_not_due_member_gets_no_mail(self, session: Session) -> None:
+        # u2 already has an assessment → not due → not summoned, even though its
+        # group is invited again for the still-due u1.
+        upsert_students(
+            session,
+            [_participant("u1", "g1"), _participant("u2", "g1", has_assessment=True)],
+        )
+        rnd = create_round(session)
+        assert rnd.id is not None
+        sender = FakeMailSender()
+
+        report = send_availability_requests(
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
+
+        assert report.sent == ["u1"]
+        assert report.not_due == ["u2"]
+        assert len(sender.sent) == 1
+        # the not-due member is never logged as mailed → no idempotency record
+        assert email_already_sent(session, "u2", KIND_AVAILABILITY, rnd.id) is False
 
     def test_excluded_group_gets_no_mail(self, session: Session) -> None:
         from planer.adapters.db import upsert_curation, upsert_groups
@@ -161,7 +189,7 @@ class TestAvailabilityRequests:
         sender = FakeMailSender()
 
         report = send_availability_requests(
-            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
         )
 
         assert report.sent == ["u2"]  # only the included group's member
@@ -174,7 +202,9 @@ class TestAvailabilityRequests:
         assert rnd.id is not None
         sender = FakeMailSender()
 
-        send_availability_requests(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        send_availability_requests(
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
 
         _, _, body = sender.sent[0]
         assert f"{_BASE}/availability/" in body
@@ -185,9 +215,11 @@ class TestAvailabilityRequests:
         assert rnd.id is not None
         sender = FakeMailSender()
 
-        send_availability_requests(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        send_availability_requests(
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
         report2 = send_availability_requests(
-            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
         )
 
         assert len(sender.sent) == 2  # no new sends
@@ -200,9 +232,11 @@ class TestAvailabilityRequests:
         assert rnd.id is not None
         sender = FakeMailSender()
 
-        send_availability_requests(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        send_availability_requests(
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
         report2 = send_availability_requests(
-            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, force=True
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3, force=True
         )
 
         assert len(sender.sent) == 2
@@ -215,7 +249,7 @@ class TestAvailabilityRequests:
         sender = FakeMailSender(fail_for={"u1@uni.de"})
 
         report = send_availability_requests(
-            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
         )
 
         assert report.sent == ["u2"]  # u2 still went through
@@ -230,10 +264,14 @@ class TestAvailabilityRequests:
         rnd = create_round(session)
         assert rnd.id is not None
         failing = FakeMailSender(fail_for={"u1@uni.de"})
-        send_availability_requests(session, failing, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        send_availability_requests(
+            session, failing, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
 
         ok = FakeMailSender()
-        report = send_availability_requests(session, ok, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        report = send_availability_requests(
+            session, ok, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
         assert report.sent == ["u1"]
 
 
@@ -252,7 +290,9 @@ class TestReminders:
         upsert_availability(session, "u1", slot.id, available=True)
         sender = FakeMailSender()
 
-        report = send_reminders(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        report = send_reminders(
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
 
         assert report.sent == ["u2"]
         assert len(sender.sent) == 1
@@ -263,8 +303,10 @@ class TestReminders:
         assert rnd.id is not None
         sender = FakeMailSender()
 
-        send_reminders(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET)
-        report2 = send_reminders(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET)
+        send_reminders(session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3)
+        report2 = send_reminders(
+            session, sender, rnd.id, base_url=_BASE, secret_key=_SECRET, threshold=3
+        )
 
         assert report2.skipped == ["u1"]
         assert email_already_sent(session, "u1", KIND_REMINDER, rnd.id) is True
@@ -286,7 +328,7 @@ class TestSlotAssignments:
         create_presentation(session, "g1", slot.id, rnd.id)
         sender = FakeMailSender()
 
-        report = send_slot_assignments(session, sender, rnd.id)
+        report = send_slot_assignments(session, sender, rnd.id, threshold=3)
 
         assert sorted(report.sent) == ["u1", "u2"]
         assert all("Gruppe Eins" in body for _, _, body in sender.sent)
@@ -302,8 +344,8 @@ class TestSlotAssignments:
         create_presentation(session, "g1", slot.id, rnd.id)
         sender = FakeMailSender()
 
-        send_slot_assignments(session, sender, rnd.id)
-        report2 = send_slot_assignments(session, sender, rnd.id)
+        send_slot_assignments(session, sender, rnd.id, threshold=3)
+        report2 = send_slot_assignments(session, sender, rnd.id, threshold=3)
 
         assert len(sender.sent) == 1
         assert report2.skipped == ["u1"]

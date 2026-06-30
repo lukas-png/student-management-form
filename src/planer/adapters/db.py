@@ -8,7 +8,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
-from planer.domain.filtering import _ASSIGNMENT_TYPE, _RULE, individual_result
+from planer.domain.filtering import _ASSIGNMENT_TYPE, _RULE, individual_result, is_due
 from planer.domain.models import Group as DomainGroup
 from planer.domain.models import Participant, Result, resolve_group_id
 
@@ -511,31 +511,44 @@ def get_students_in_groups(session: Session, group_ids: list[str]) -> list[Stude
     return list(session.exec(select(Student).where(Student.group_id.in_(group_ids))).all())  # type: ignore[arg-type]
 
 
+def student_to_participant(student: Student) -> Participant:
+    """Reconstruct a domain Participant from a persisted Student row.
+
+    Only the individual homework result is reconstructed (synthetic, from the
+    stored ``achieved_points``); that, plus the admission/assessment flags, is all
+    the domain ``is_due`` predicate needs.
+    """
+    synthetic_result = Result(
+        rule=_RULE,
+        assignment_type=_ASSIGNMENT_TYPE,
+        achieved_points=student.achieved_points,
+        passed=False,
+    )
+    return Participant(
+        user_id=student.id,
+        display_name=student.name,
+        email=student.email,
+        matr_nr=student.matr_nr,
+        group_id=student.group_id,
+        group_name="",
+        has_admission=student.has_admission,
+        has_admission_from_previous_semester=student.has_admission_from_previous_semester,
+        has_assessment=student.has_assessment,
+        results=(synthetic_result,),
+    )
+
+
+def student_is_due(student: Student, threshold: int) -> bool:
+    """Whether a persisted Student is still due (single-sources domain ``is_due``)."""
+    return is_due(student_to_participant(student), threshold)
+
+
 def build_domain_groups(db_groups: list[Group], db_students: list[Student]) -> list[DomainGroup]:
     from collections import defaultdict
 
     members_by_group: defaultdict[str, list[Participant]] = defaultdict(list)
     for s in db_students:
-        synthetic_result = Result(
-            rule=_RULE,
-            assignment_type=_ASSIGNMENT_TYPE,
-            achieved_points=s.achieved_points,
-            passed=False,
-        )
-        members_by_group[s.group_id].append(
-            Participant(
-                user_id=s.id,
-                display_name=s.name,
-                email=s.email,
-                matr_nr=s.matr_nr,
-                group_id=s.group_id,
-                group_name="",
-                has_admission=s.has_admission,
-                has_admission_from_previous_semester=s.has_admission_from_previous_semester,
-                has_assessment=s.has_assessment,
-                results=(synthetic_result,),
-            )
-        )
+        members_by_group[s.group_id].append(student_to_participant(s))
     return [
         DomainGroup(id=g.id, name=g.name, members=tuple(members_by_group.get(g.id, [])))
         for g in db_groups

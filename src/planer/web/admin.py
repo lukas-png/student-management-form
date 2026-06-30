@@ -32,7 +32,7 @@ from planer.adapters.db import (
 from planer.adapters.submit_results import submit_presentations
 from planer.config import Settings, get_settings
 from planer.domain.availability import group_feasible_slots, member_declined
-from planer.domain.filtering import individual_result, is_due
+from planer.domain.filtering import due_members, individual_result, is_due
 from planer.domain.models import Slot as DomainSlot
 from planer.export import build_export_rows, rows_to_csv
 from planer.logging_setup import get_logger
@@ -223,13 +223,16 @@ async def round_dashboard(
         included = cur.included if cur else True
         pinned_slot_id = cur.pinned_slot_id if cur else None
         override = cur.override if cur else False
-        feasible = group_feasible_slots(dg, avail_dict, domain_slots, require_all=require_all)
+        # Only due members are summoned, so the quorum (and any decline conflict)
+        # is computed over them
+        due_dg = due_members(dg, threshold)
+        feasible = group_feasible_slots(due_dg, avail_dict, domain_slots, require_all=require_all)
         pres: Presentation | None = presentations.get(dg.id)
-        # Conflict: a slot was fixed for the group but a member declined it
+        # Conflict: a slot was fixed for the group but a due member declined it
         # (and the admin hasn't overridden) → must be resolved before solving.
         is_conflict = (
             pinned_slot_id is not None
-            and member_declined(dg, str(pinned_slot_id), avail_dict, require_all=require_all)
+            and member_declined(due_dg, str(pinned_slot_id), avail_dict, require_all=require_all)
             and not override
         )
         members = [

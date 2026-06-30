@@ -29,6 +29,7 @@ from planer.adapters.db import (
     get_slots_for_round,
     get_students_in_groups,
     log_email,
+    student_is_due,
 )
 from planer.adapters.mail import MailSender
 from planer.logging_setup import get_logger
@@ -53,6 +54,7 @@ class SendReport:
     sent: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)  # already sent (idempotency)
     excluded: list[str] = field(default_factory=list)  # group deselected by admin
+    not_due: list[str] = field(default_factory=list)  # member not due (Altzulassung/assessment)
     failed: list[tuple[str, str]] = field(default_factory=list)  # (student_id, error)
 
 
@@ -92,6 +94,7 @@ def _log_summary(kind: str, round_id: int, report: SendReport) -> SendReport:
             "sent": len(report.sent),
             "skipped": len(report.skipped),
             "excluded": len(report.excluded),
+            "not_due": len(report.not_due),
             "failed": len(report.failed),
         },
     )
@@ -142,9 +145,10 @@ def send_availability_requests(
     *,
     base_url: str,
     secret_key: str,
+    threshold: int,
     force: bool = False,
 ) -> SendReport:
-    """Send the magic-link availability form to every student in an included group."""
+    """Send the magic-link availability form to every due student in an included group."""
     report = SendReport()
     excluded = _excluded_group_ids(session, round_id)
     rnd = get_round(session, round_id)
@@ -152,6 +156,9 @@ def send_availability_requests(
     for student in get_all_students(session):
         if _is_excluded(student, excluded):
             report.excluded.append(student.id)  # group deselected by the admin → no mail
+            continue
+        if not student_is_due(student, threshold):
+            report.not_due.append(student.id)  # Altzulassung/assessment → not summoned
             continue
         if not force and email_already_sent(session, student.id, KIND_AVAILABILITY, round_id):
             report.skipped.append(student.id)
@@ -182,9 +189,10 @@ def send_reminders(
     *,
     base_url: str,
     secret_key: str,
+    threshold: int,
     force: bool = False,
 ) -> SendReport:
-    """Remind students in an included group who have not submitted availability yet."""
+    """Remind due students in an included group who have not submitted availability yet."""
     report = SendReport()
     excluded = _excluded_group_ids(session, round_id)
     responded = {a.student_id for a in get_availabilities_for_round(session, round_id)}
@@ -193,6 +201,9 @@ def send_reminders(
     for student in get_all_students(session):
         if _is_excluded(student, excluded):
             report.excluded.append(student.id)  # group deselected by the admin → no mail
+            continue
+        if not student_is_due(student, threshold):
+            report.not_due.append(student.id)  # Altzulassung/assessment → not summoned
             continue
         if student.id in responded:
             continue
@@ -223,9 +234,10 @@ def send_slot_assignments(
     sender: MailSender,
     round_id: int,
     *,
+    threshold: int,
     force: bool = False,
 ) -> SendReport:
-    """Notify every member of each scheduled group of their assigned slot."""
+    """Notify every due member of each scheduled group of their assigned slot."""
     report = SendReport()
     presentations = get_presentations_for_round(session, round_id)
     slots = {s.id: s for s in get_slots_for_round(session, round_id)}
@@ -241,6 +253,9 @@ def send_slot_assignments(
         room = slot.room if slot else ""
         group_name = group_names.get(pres.group_id, pres.group_id)
         for student in students_by_group.get(pres.group_id, []):
+            if not student_is_due(student, threshold):
+                report.not_due.append(student.id)  # Altzulassung/assessment → not summoned
+                continue
             if not force and email_already_sent(session, student.id, KIND_ASSIGNMENT, round_id):
                 report.skipped.append(student.id)
                 continue
