@@ -133,6 +133,7 @@ class MemberRow:
     has_assessment: bool
     achieved_points: int
     is_due: bool
+    responded: bool
 
 
 @dataclass
@@ -206,6 +207,7 @@ async def round_dashboard(
     avail_dict: dict[tuple[str, str], bool] = {
         (a.student_id, str(a.slot_id)): a.available for a in db_avails
     }
+    responded_ids = {a.student_id for a in db_avails}
 
     curations = {c.group_id: c for c in get_curations_for_round(session, round_id)}
     presentations = {p.group_id: p for p in get_presentations_for_round(session, round_id)}
@@ -217,6 +219,8 @@ async def round_dashboard(
 
     require_all = current_round.quorum != "any"
     threshold = settings.individual_threshold
+    summoned_count = 0
+    responded_count = 0
     group_rows: list[GroupRow] = []
     for dg in domain_groups:
         cur: Curation | None = curations.get(dg.id)
@@ -243,9 +247,14 @@ async def round_dashboard(
                 has_assessment=m.has_assessment,
                 achieved_points=ir.achieved_points if (ir := individual_result(m)) else 0,
                 is_due=is_due(m, threshold),
+                responded=m.user_id in responded_ids,
             )
             for m in dg.members
         ]
+        if included:
+            summoned = [mr for mr in members if mr.is_due]
+            summoned_count += len(summoned)
+            responded_count += sum(1 for mr in summoned if mr.responded)
         group_rows.append(
             GroupRow(
                 group_id=dg.id,
@@ -275,6 +284,8 @@ async def round_dashboard(
             "solver_ran": solver_ran,
             "mode": current_round.mode,
             "quorum": current_round.quorum,
+            "responded_count": responded_count,
+            "summoned_count": summoned_count,
         },
         settings,
     )

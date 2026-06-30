@@ -738,3 +738,49 @@ class TestPinnedDeclineConflict:
         round_id, _ = self._setup_declined_pin(test_engine)
         resp = client.get(f"/admin/rounds/{round_id}", follow_redirects=True)
         assert "Konflikt (Absage)" in resp.text
+
+
+class TestResponseTally:
+    def test_counts_only_summoned_members(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
+        # g1: u1 (due, responded) + u2 (assessed, not summoned). Only u1 counts,
+        # and u1 has responded → 1 von 1.
+        from dataclasses import replace
+
+        from planer.adapters.db import upsert_availability
+
+        with Session(test_engine) as sess:
+            upsert_students(
+                sess,
+                [
+                    _participant("u1", "g1"),
+                    replace(_participant("u2", "g1"), has_assessment=True),
+                ],
+            )
+            upsert_groups(sess, [DomainGroup(id="g1", name="G1", members=())])
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            slot = create_slot(sess, rnd.id, _T0)
+            assert slot.id is not None
+            upsert_availability(sess, "u1", slot.id, available=True)
+            round_id = rnd.id
+
+        resp = client.get(f"/admin/rounds/{round_id}", follow_redirects=True)
+        assert "1 von 1" in resp.text
+        assert "Alle zurückgemeldet" in resp.text
+
+    def test_counts_open_responses(self, client: TestClient, test_engine) -> None:  # type: ignore[no-untyped-def]
+        with Session(test_engine) as sess:
+            upsert_students(sess, [_participant("u1", "g1"), _participant("u2", "g1")])
+            upsert_groups(sess, [DomainGroup(id="g1", name="G1", members=())])
+            rnd = create_round(sess)
+            assert rnd.id is not None
+            slot = create_slot(sess, rnd.id, _T0)
+            assert slot.id is not None
+            from planer.adapters.db import upsert_availability
+
+            upsert_availability(sess, "u1", slot.id, available=True)  # only u1 responded
+            round_id = rnd.id
+
+        resp = client.get(f"/admin/rounds/{round_id}", follow_redirects=True)
+        assert "1 von 2" in resp.text
+        assert "1 offen" in resp.text

@@ -129,6 +129,16 @@
   <!-- Groups -->
   <section class="panel">
     <h2>Gruppen</h2>
+    <p class="panel-hint">
+      Rückmeldungen:
+      <strong>{{ responded_count }} von {{ summoned_count }}</strong>
+      vorgeladenen Studierenden haben ihre Verfügbarkeit abgegeben.
+      {%- if summoned_count and responded_count < summoned_count %}
+        <span class="conflict-text">{{ summoned_count - responded_count }} offen.</span>
+      {%- elif summoned_count %}
+        <span class="badge-ok">Alle zurückgemeldet ✓</span>
+      {%- endif %}
+    </p>
     <div class="toolbar">
       <form method="post" action="/admin/rounds/{{ current_round.id }}/curate-all" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -210,7 +220,7 @@
             <summary>{{ row.members | length }} Mitglied(er)</summary>
             <table class="members-table">
               <thead>
-                <tr><th>Name</th><th>Zulassung</th><th>Altzulassung</th><th>Assessment</th><th>Punkte</th><th>Fällig</th></tr>
+                <tr><th>Name</th><th>Zulassung</th><th>Altzulassung</th><th>Assessment</th><th>Punkte</th><th>Fällig</th><th>Rückgemeldet</th></tr>
               </thead>
               <tbody>
               {% for m in row.members %}
@@ -221,6 +231,11 @@
                   <td>{% if m.has_assessment %}✓{% else %}–{% endif %}</td>
                   <td>{{ m.achieved_points }}</td>
                   <td>{% if m.is_due %}Ja{% else %}Nein{% endif %}</td>
+                  <td>
+                    {%- if not m.is_due %}–
+                    {%- elif m.responded %}<span class="badge-ok">✓</span>
+                    {%- else %}<span class="conflict-text">offen</span>{% endif %}
+                  </td>
                 </tr>
               {% endfor %}
               </tbody>
